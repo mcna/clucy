@@ -1,6 +1,6 @@
-(defproject clucy "0.4.0"
+(defproject clucy "0.5.0"
   :description "A Clojure interface to the Lucene search engine"
-  :url "http://github/weavejester/clucy"
+  :url "http://github/yxzhang/clucy"
   :dependencies [[org.clojure/clojure "1.4.0"]
                  [org.apache.lucene/lucene-core "4.2.0"]
                  [org.apache.lucene/lucene-queryparser "4.2.0"]
@@ -11,5 +11,5 @@
   :profiles {:1.4  {:dependencies [[org.clojure/clojure "1.4.0"]]}
              :1.5  {:dependencies [[org.clojure/clojure "1.5.0"]]}
              :1.6  {:dependencies [[org.clojure/clojure "1.6.0-master-SNAPSHOT"]]}}
-  :codox {:src-dir-uri "http://github/weavejester/clucy/blob/master"
+  :codox {:src-dir-uri "http://github/yxzhang/clucy/blob/master"
           :src-linenum-anchor-prefix "L"})
