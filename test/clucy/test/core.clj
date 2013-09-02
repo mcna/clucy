@@ -37,7 +37,11 @@
       (is (== 1 (count (search index "name:miles" 10))))
       (is (== 1 (count (search index "name:miles age:100" 10))))
       (is (== 0 (count (search index "name:miles AND age:100" 10))))
-      (is (== 0 (count (search index "name:miles age:100" 10 :default-operator :and))))))
+      (is (== 0 (count (search index "name:miles age:100" 10 :default-operator :and))))
+      (is (= [{:name "Miles" :age 36 }] (search index "name:miles" 10)))
+      (is (= [ {:name "Mary" :age 48} {:name "Mary Lou" :age 39}] 
+             (binding [*numeric-hints* {"age" "long"}]
+               (search index "age:[39 TO 48]" 10)) ))))
 
   (testing "search-and-delete fn"
     (let [index (memory-index)]

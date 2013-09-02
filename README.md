@@ -11,7 +11,7 @@ Installation
 To install Clucy, add the following dependency to your `project.clj`
 file:
 
-    [clucy "0.4.0"]
+    [clucy "0.5.0"]
 
 Usage
 -----
@@ -50,6 +50,29 @@ You can search and remove all in one step. To remove all of the
 scientists...
 
     (clucy/search-and-delete index "job:scientist")
+
+Numeric Types
+--------------
+
+You can add maps with numeric value to the index:
+
+    (clucy/add index
+       {:name "Bob", :age (int 20)}
+       {:name "Donald", :age (int 35)})
+       
+Once maps have been added, the index can be searched:
+
+	user=> (binding [clucy/*numeric-hints* {"age" "int"}]
+	      (clucy/search index "age:20" 10))
+	({:age 20, :name "Bob"})
+	
+Or do range query just as :
+
+	user=> (binding [clucy/*numeric-hints* {"age" "int"}]
+   	      (clucy/search index "age:[32 TO 35]" 10))
+	({:age 35, :name "Donald"})
+
+Numberic type can be one of  int, long, double, float.
 
 Storing Fields
 --------------
