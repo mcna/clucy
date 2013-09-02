@@ -1,9 +1,12 @@
-Clucy
+ZClucy 
 =====
 
-[![Build Status](https://secure.travis-ci.org/weavejester/clucy.png?branch=master)](http://travis-ci.org/weavejester/clucy)
+[![Build Status](https://secure.travis-ci.org/yxzhang/clucy.png?branch=master)](http://travis-ci.org/yxzhang/clucy)
 
-Clucy is a Clojure interface to [Lucene](http://lucene.apache.org/).
+ZClucy is forked from clucy  a Clojure interface to [Lucene](http://lucene.apache.org/).
+There are some enhanced futures in ZClucy :
+(1)Support numeric values (such as int, long, float double)  store and query (simple query and range query)
+(2)Support multivalued fileds.
 
 Installation
 ------------
@@ -11,7 +14,7 @@ Installation
 To install Clucy, add the following dependency to your `project.clj`
 file:
 
-    [clucy "0.5.0"]
+    [zclucy "0.5.0"]
 
 Usage
 -----
@@ -73,6 +76,16 @@ Or do range query just as :
 	({:age 35, :name "Donald"})
 
 Numberic type can be one of  int, long, double, float.
+
+Multivalued Fields
+--------------
+
+You can use clojure collection to manage multivalued fields, eg. 
+
+    (clucy/add index
+       {:name "Bob", :books ["Clojure Programming" "Clojure In Action"] }
+
+
 
 Storing Fields
 --------------
