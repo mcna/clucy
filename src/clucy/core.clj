@@ -2,13 +2,13 @@
   (:import (java.io StringReader File)
            (org.apache.lucene.analysis Analyzer TokenStream)
            (org.apache.lucene.analysis.standard StandardAnalyzer)
-           (org.apache.lucene.document Document Field Field$Index Field$Store)
+           (org.apache.lucene.document Document FieldType  FieldType$NumericType Field IntField FloatField LongField DoubleField Field$Index Field$Store)
            (org.apache.lucene.index IndexWriter IndexReader Term
                                     IndexWriterConfig DirectoryReader FieldInfo)
            (org.apache.lucene.queryparser.classic QueryParser)
            (org.apache.lucene.search BooleanClause BooleanClause$Occur
-                                     BooleanQuery IndexSearcher Query ScoreDoc
-                                     Scorer TermQuery)
+                                     BooleanQuery IndexSearcher Query ScoreDoc 
+                                     Scorer TermQuery MatchAllDocsQuery NumericRangeQuery)
            (org.apache.lucene.search.highlight Highlighter QueryScorer
                                                SimpleHTMLFormatter)
            (org.apache.lucene.util Version AttributeSource)
@@ -16,6 +16,7 @@
 
 (def ^{:dynamic true} *version* Version/LUCENE_CURRENT)
 (def ^{:dynamic true} *analyzer* (StandardAnalyzer. *version*))
+(def ^:dynamic *numeric-hints* {})
 
 ;; To avoid a dependency on either contrib or 1.2+
 (defn as-str ^String [x]
@@ -60,18 +61,27 @@
      (add-field document key value {}))
 
   ([document key value meta-map]
-     (.add ^Document document
-           (Field. (as-str key) (as-str value)
-                   (if (false? (:stored meta-map))
-                     Field$Store/NO
-                     Field$Store/YES)
-                   (if (false? (:indexed meta-map))
-                     Field$Index/NO
-                     (case [(false? (:analyzed meta-map)) (false? (:norms meta-map))]
-                       [false false] Field$Index/ANALYZED
-                       [true false] Field$Index/NOT_ANALYZED
-                       [false true] Field$Index/ANALYZED_NO_NORMS
-                       [true true] Field$Index/NOT_ANALYZED_NO_NORMS))))))
+    (let [n (name key)
+          store? (not (false? (:stored meta-map)))
+          index? (not (false? (:indexed meta-map)))
+          analyzed? (not (false? (:analyzed meta-map)))
+          norms? (not (false? (:norms meta-map)))
+          
+          field-type (doto (FieldType.) 
+                       (.setStored store?) (.setIndexed index?) 
+                       (.setTokenized analyzed?) (.setOmitNorms (not norms?)))
+          vt (class value)
+          field (condp = vt 
+                  String (Field. n value field-type)
+                  Integer (IntField. n value (doto field-type (.setNumericType FieldType$NumericType/INT)))
+                  Long (LongField. n value (doto field-type (.setNumericType FieldType$NumericType/LONG)))
+                  Float (FloatField. n value (doto field-type (.setNumericType FieldType$NumericType/FLOAT)))
+                  Double (DoubleField. n value (doto field-type (.setNumericType FieldType$NumericType/DOUBLE)))
+                  (Field. n (as-str value) field-type)
+                  )
+          ]
+      (println "add-field vt:" vt (.name field) (class field))
+      (.add ^Document document field))))
 
 (defn- map-stored
   "Returns a hash-map containing all of the values in the map that
@@ -95,7 +105,8 @@
   [map]
   (let [document (Document.)]
     (doseq [[key value] map]
-      (add-field document key value (key (meta map))))
+      (if (coll? value) (doseq [v value] (add-field document key v (key (meta map))))
+        (add-field document key value (key (meta map)))))
     (if *content*
       (add-field document :_content (concat-values map)))
     document))
@@ -127,8 +138,9 @@
   ([^Document document score]
      (document->map document score (constantly nil)))
   ([^Document document score highlighter]
-     (let [m (into {} (for [^Field f (.getFields document)]
-                        [(keyword (.name f)) (.stringValue f)]))
+     (let [m (apply merge-with  (fn [a b] (if (coll? a) (conj a b) [a b]))
+                    (for [^Field f (.getFields document)]
+                        {(keyword (.name f)) (or (.numericValue f) (.stringValue f))}))
            fragments (highlighter m) ; so that we can highlight :_content
            m (dissoc m :_content)]
        (with-meta
@@ -169,6 +181,25 @@ fragments."
                              ^String separator))))
     (constantly nil)))
 
+(defn make-parser [default-field]
+  (proxy [QueryParser] [*version* (as-str default-field) *analyzer*]
+    (newTermQuery [term]
+      (if-let [num-type (*numeric-hints* (.field term))]
+        (case num-type
+          "long" (let [v (-> term .text Long/parseLong)] (NumericRangeQuery/newLongRange (.field term)  v v true true))
+          "int" (let [v (-> term .text Integer/parseInt)] (NumericRangeQuery/newIntRange (.field term)  v v true true))
+          "double" (let [v (-> term .text Double/parseDouble)] (NumericRangeQuery/newDoubleRange (.field term)  v v true true))
+          "float" (let [v (-> term .text Float/parseFloat)] (NumericRangeQuery/newFloatRange (.field term)  v v true true)))
+        (proxy-super newTermQuery term)))
+    (newRangeQuery [field from to start-include? end-include?]
+      (if-let [num-type (*numeric-hints* field)]
+        (case num-type
+          "long" (let [start (-> from Long/parseLong), end (-> to Long/parseLong)] (NumericRangeQuery/newLongRange field  start end true true))
+          "int" (let [start (-> from Integer/parseInt), end (-> to Integer/parseInt)] (NumericRangeQuery/newIntRange field  start end true true))
+          "double" (let [start (-> from Double/parseDouble) end (-> to Double/parseDouble)] (NumericRangeQuery/newDoubleRange field  start end true true))
+          "float" (let [start (-> from  Float/parseFloat) end (-> to Double/parseDouble)] (NumericRangeQuery/newFloatRange field  start end true true)))
+        (proxy-super newRangeQuery field from to start-include? end-include?)))))
+
 (defn search
   "Search the supplied index with a query string."
   [index query max-results
@@ -179,13 +210,11 @@ fragments."
     (with-open [reader (index-reader index)]
       (let [default-field (or default-field :_content)
             searcher (IndexSearcher. reader)
-            parser (doto (QueryParser. *version*
-                                       (as-str default-field)
-                                       *analyzer*)
+            parser (doto (make-parser default-field)
                      (.setDefaultOperator (case (or default-operator :or)
                                             :and QueryParser/AND_OPERATOR
                                             :or  QueryParser/OR_OPERATOR)))
-            query (.parse parser query)
+            query (if (= "*:*" query) (MatchAllDocsQuery.) (.parse parser query))
             hits (.search searcher query (int max-results))
             highlighter (make-highlighter query searcher highlight)
             start (* page results-per-page)
