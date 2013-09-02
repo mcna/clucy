@@ -85,7 +85,8 @@ You can use clojure collection to manage multivalued fields, eg.
     (clucy/add index
        {:name "Bob", :books ["Clojure Programming" "Clojure In Action"] }
 
-
+    user=> (search index "books:action" 10)
+       ({:name "Bob", :books ["Clojure Programming" "Clojure In Action"]})
 
 Storing Fields
 --------------
