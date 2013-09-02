@@ -80,7 +80,6 @@
                   (Field. n (as-str value) field-type)
                   )
           ]
-      (println "add-field vt:" vt (.name field) (class field))
       (.add ^Document document field))))
 
 (defn- map-stored
@@ -128,8 +127,13 @@
         (doseq [[key value] m]
           (.add query
                 (BooleanClause.
-                 (TermQuery. (Term. (.toLowerCase (as-str key))
-                                    (.toLowerCase (as-str value))))
+                  (let [vt (class value)  field (.toLowerCase (as-str key))]
+                    (condp = vt
+                      Integer  (NumericRangeQuery/newIntRange field value value true true)
+                      Float  (NumericRangeQuery/newFloatRange field value value true true)
+                      Long  (NumericRangeQuery/newLongRange field value value true true)
+                      Double  (NumericRangeQuery/newDoubleRange field value value true true)
+                      (TermQuery. (Term. field (.toLowerCase (as-str value)))) ))
                  BooleanClause$Occur/MUST)))
         (.deleteDocuments writer query)))))
 
