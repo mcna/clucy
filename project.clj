@@ -1,4 +1,4 @@
-(defproject zclucy "0.6.0"
+(defproject zclucy "0.7.0"
   :description "A Clojure interface to the Lucene search engine"
   :url "http://github/yxzhang/clucy"
   :dependencies [[org.clojure/clojure "1.4.0"]

@@ -46,7 +46,8 @@
       (is (== 0 (count (search index "name:miles age:100" 10 :default-operator :and))))
       (is (= [{:name "Miles" :age 36 }] (search index "name:miles" 10)))
       (is (= [ {:name "Mary" :age 48} {:name "Mary Lou" :age 39}] 
-               (search index "age:[39 TO 48]" 10)) ))))
+               (search index "age:[39 TO 48]" 10)) )
+      (is (= {:name "Mary" :age 48} (first (search index "*:*" 10 :sort-by "age desc")))))))
 
   (testing "search-and-delete fn"
     (binding [*schema-hints* people-schema]

@@ -7,7 +7,7 @@
                                     IndexWriterConfig DirectoryReader FieldInfo)
            (org.apache.lucene.queryparser.classic QueryParser)
            (org.apache.lucene.search BooleanClause BooleanClause$Occur
-                                     BooleanQuery IndexSearcher Query ScoreDoc 
+                                     BooleanQuery IndexSearcher Query ScoreDoc  Sort SortField SortField$Type
                                      Scorer TermQuery MatchAllDocsQuery NumericRangeQuery)
            (org.apache.lucene.search.highlight Highlighter QueryScorer
                                                SimpleHTMLFormatter)
@@ -236,10 +236,27 @@ fragments."
           "float" (let [start (-> from  Float/parseFloat) end (-> to Double/parseDouble)] (NumericRangeQuery/newFloatRange field  start end true true)))
         (proxy-super newRangeQuery field from to start-include? end-include?)))))
 
+(defn make-sort 
+  "make sort from sort-str such as \"name asc, age desc\""
+  [sort-str]
+  (if (nil? sort-str) nil
+    (let [sort (Sort.)]
+      (doseq [[field flag] (partition-all 2 (clojure.string/split sort-str #",\s*|\s+"))]
+      (.setSort sort (SortField. field
+                        (case (-> field (keyword) *schema-hints* :type)
+                              "long" SortField$Type/LONG
+                              "int" SortField$Type/INT
+                              "double" SortField$Type/DOUBLE
+                              "float" SortField$Type/FLOAT
+                              "string" SortField$Type/STRING
+                              (case field "$doc" SortField$Type/DOC "$score"  SortField$Type/SCORE SortField$Type/STRING))
+                        (= "desc" flag))))
+      sort)))
+
 (defn search
   "Search the supplied index with a query string."
   [index query max-results
-   & {:keys [highlight default-field default-operator page results-per-page]
+   & {:keys [highlight default-field default-operator page results-per-page sort-by]
       :or {page 0 results-per-page max-results}}]
   (if (every? false? [default-field *content*])
     (throw (Exception. "No default search field specified"))
@@ -250,8 +267,9 @@ fragments."
                      (.setDefaultOperator (case (or default-operator :or)
                                             :and QueryParser/AND_OPERATOR
                                             :or  QueryParser/OR_OPERATOR)))
+            sort (make-sort sort-by)
             query (if (= "*:*" query) (MatchAllDocsQuery.) (.parse parser query))
-            hits (.search searcher query (int max-results))
+            hits (if (nil? sort) (.search searcher query (int max-results))  (.search searcher query (int max-results) sort))
             highlighter (make-highlighter query searcher highlight)
             start (* page results-per-page)
             end (min (+ start results-per-page) (.totalHits hits))]

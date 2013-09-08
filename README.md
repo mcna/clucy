@@ -5,8 +5,9 @@ ZClucy
 
 ZClucy is forked from clucy  a Clojure interface to [Lucene](http://lucene.apache.org/).
 There are some enhanced futures in ZClucy :
-(1)Supports numeric values (such as int, long, float double) 
-(2)Supports multivalued fileds.
+1. Supports numeric values (such as int, long, float double)  
+- Supports multivalued fileds.
+- Supports sort
 
 
 Installation
@@ -15,7 +16,7 @@ Installation
 To install Clucy, add the following dependency to your `project.clj`
 file:
 
-    [zclucy "0.6.0"]
+    [zclucy "0.7.0"]
 
 Usage
 -----
@@ -106,25 +107,41 @@ You can use clojure collection to manage multivalued fields, eg.
     (clucy/add index
        {:name "Bob", :books ["Clojure Programming" "Clojure In Action"] }
 
-    user=> (search index "books:action" 10)
+    user=> (clucy/search index "books:action" 10)
        ({:name "Bob", :books ["Clojure Programming" "Clojure In Action"]})
 
-Storing Fields
+
+Sort Results
 --------------
+First add some documents with a defined schema
 
-By default all fields in a map are stored and indexed. If you would
-like more fine-grained control over which fields are stored and index,
-add this to the meta-data for your map.
+(def people-schema {:name {} :age {:type "int", :analyzed false, :norms false }})
 
-    (with-meta {:name "Stever", :job "Writer", :phone "555-212-0202"}
-      {:phone {:stored false}})
+(binding [*schema-hints* people-schema]
+    (clucy/add index
+       {:name "Bob", :age (int 20)}
+       {:name "Donald", :age (int 35)}))
 
-When the map above is saved to the index, the phone field will be
-available for searching but will not be part of map in the search
-results. This example is pretty contrived, this makes more sense when
-you are indexing something large (like the full text of a long
-article) and you don't want to pay the price of storing the entire
-text in the index.
+Then you can sort the result when search them :
+
+user=> ((binding [*schema-hints* people-schema]
+          (clucy/search index "*:*" 10 :sort-by "age desc"))
+({:age 35, :name "Donald"} {:age 20, :name "Bob"})
+
+You can sort by several fields just like :
+
+((binding [*schema-hints* people-schema]
+          (clucy/search index "*:*" 10 :sort-by "age desc, name asc"))
+
+Or sort  by document number (index order) :
+
+((binding [*schema-hints* people-schema]
+          (clucy/search index "*:*" 10 :sort-by "$doc asc"))
+          
+Or sort by  document score (relevance):
+
+((binding [*schema-hints* people-schema]
+          (clucy/search index "*:*" 10 :sort-by "$score asc"))
 
 Default Search Field
 --------------------
