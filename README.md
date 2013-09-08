@@ -6,8 +6,8 @@ ZClucy
 ZClucy is forked from clucy  a Clojure interface to [Lucene](http://lucene.apache.org/).
 There are some enhanced futures in ZClucy :
 1. Supports numeric values (such as int, long, float double)  
-- Supports multivalued fileds.
-- Supports sort
+1. Supports multivalued fileds.
+1. Supports sort
 
 
 Installation
