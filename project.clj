@@ -11,5 +11,6 @@
   :profiles {:1.4  {:dependencies [[org.clojure/clojure "1.4.0"]]}
              :1.5  {:dependencies [[org.clojure/clojure "1.5.0"]]}
              :1.6  {:dependencies [[org.clojure/clojure "1.6.0-master-SNAPSHOT"]]}}
+  :warn-on-reflection true
   :codox {:src-dir-uri "http://github/yxzhang/clucy/blob/master"
           :src-linenum-anchor-prefix "L"})

@@ -5,8 +5,9 @@ ZClucy
 
 ZClucy is forked from clucy  a Clojure interface to [Lucene](http://lucene.apache.org/).
 There are some enhanced futures in ZClucy :
-(1)Support numeric values (such as int, long, float double)  store and query (simple query and range query)
-(2)Support multivalued fileds.
+(1)Supports numeric values (such as int, long, float double) 
+(2)Supports multivalued fileds.
+
 
 Installation
 ------------
@@ -53,25 +54,45 @@ You can search and remove all in one step. To remove all of the
 scientists...
 
     (clucy/search-and-delete index "job:scientist")
+    
+
+Manipulate Schema
+--------------
+
+By default, every field is a string stored, indexed, analyzed and stores norms. You can customise it just like :
+
+(def people-schema {:name {} :age {:type "int", :analyzed false, :norms false }})
+
+(binding [*schema-hints* people-schema]
+;.... do some adding
+;.....do some query
+)
+
+Then name is still a string stored, indexed, analyzed and stores norms, but age is a int without being analyzed and  norms.
+
 
 Numeric Types
 --------------
 
 You can add maps with numeric value to the index:
 
+(def people-schema {:name {} :age {:type "int", :analyzed false, :norms false }})
+
+
+(binding [*schema-hints* people-schema]
     (clucy/add index
        {:name "Bob", :age (int 20)}
-       {:name "Donald", :age (int 35)})
+       {:name "Donald", :age (int 35)}))
        
 Once maps have been added, the index can be searched:
 
-	user=> (binding [clucy/*numeric-hints* {"age" "int"}]
+	user=> (binding [*schema-hints* people-schema]
 	      (clucy/search index "age:20" 10))
 	({:age 20, :name "Bob"})
 	
 Or do range query just as :
 
-	user=> (binding [clucy/*numeric-hints* {"age" "int"}]
+	user=> (binding [*schema-hints* people-schema]
    	      (clucy/search index "age:[32 TO 35]" 10))
 	({:age 35, :name "Donald"})
 

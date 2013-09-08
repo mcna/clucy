@@ -5,3 +5,6 @@ clucy*.jar
 pom.xml
 pom.xml.asc
 .lein-failures
+/bin
+/.settings/ccw.repl.cmdhistory.prefs
+/.settings

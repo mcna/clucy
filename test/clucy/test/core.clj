@@ -3,6 +3,8 @@
         clojure.test
         [clojure.set :only [intersection]]))
 
+(def people-schema {:name {} :age {:type "int", :analyzed false, :norms false }})
+
 (def people [{:name "Miles" :age 36}
              {:name "Emily" :age 0.3}
              {:name "Joanna" :age 34}
@@ -26,28 +28,32 @@
       (is (== 1 (count (search index "name:miles" 10))))))
 
   (testing "delete fn"
-    (let [index (memory-index)]
+     (binding [*schema-hints* people-schema]
+       (let [index (memory-index)]
       (doseq [person people] (add index person))
       (delete index (first people))
-      (is (== 0 (count (search index "name:miles" 10))))))
+      (is (== 0 (count (search index "name:miles" 10)))))))
 
   (testing "search fn"
+   (binding [*schema-hints* people-schema]
     (let [index (memory-index)]
       (doseq [person people] (add index person))
       (is (== 1 (count (search index "name:miles" 10))))
+      (is (=  {:indexed true, :stored true, :tokenized true} (->  (search index "name:miles" 10) first meta :name)))
+      (is (nil? (binding [*doc-with-meta?* false] (->  (search index "name:miles" 10) first meta ))))
       (is (== 1 (count (search index "name:miles age:100" 10))))
       (is (== 0 (count (search index "name:miles AND age:100" 10))))
       (is (== 0 (count (search index "name:miles age:100" 10 :default-operator :and))))
       (is (= [{:name "Miles" :age 36 }] (search index "name:miles" 10)))
       (is (= [ {:name "Mary" :age 48} {:name "Mary Lou" :age 39}] 
-             (binding [*numeric-hints* {"age" "long"}]
                (search index "age:[39 TO 48]" 10)) ))))
 
   (testing "search-and-delete fn"
-    (let [index (memory-index)]
+    (binding [*schema-hints* people-schema]
+     (let [index (memory-index)]
       (doseq [person people] (add index person))
       (search-and-delete index "name:mary")
-      (is (== 0 (count (search index "name:mary" 10))))))
+      (is (== 0 (count (search index "name:mary" 10)))))))
 
   (testing "search fn with highlighting"
     (let [index (memory-index)

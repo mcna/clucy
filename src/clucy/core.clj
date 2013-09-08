@@ -15,8 +15,40 @@
            (org.apache.lucene.store NIOFSDirectory RAMDirectory Directory)))
 
 (def ^{:dynamic true} *version* Version/LUCENE_CURRENT)
+
 (def ^{:dynamic true} *analyzer* (StandardAnalyzer. *version*))
-(def ^:dynamic *numeric-hints* {})
+
+(def ^:dynamic  *doc-with-meta?* true)
+
+;; flag to indicate a default "_content" field should be maintained
+(def ^{:dynamic true} *content* true)
+
+(def ^:dynamic *schema-hints* {})
+
+(defn as-int ^Integer [x]
+  (cond
+    (instance? Integer  x) x
+    (string? x) (Integer/parseInt x)
+    :else (int x)))
+
+(defn as-float ^Float [x]
+  (cond
+    (instance? Float  x) x
+    (string? x) (Float/parseFloat x)
+    :else (float x)))
+
+(defn as-long ^long [x]
+  (cond
+    (integer? x) x
+    (string? x) (Long/parseLong x)
+    :else (long x)))
+
+(defn as-double ^double [x]
+  (cond
+    (float? x) x
+    (string? x) (Double/parseDouble x)
+    :else (double x)))
+
 
 ;; To avoid a dependency on either contrib or 1.2+
 (defn as-str ^String [x]
@@ -24,8 +56,7 @@
     (name x)
     (str x)))
 
-;; flag to indicate a default "_content" field should be maintained
-(def ^{:dynamic true} *content* true)
+
 
 (defn memory-index
   "Create a new index in RAM."
@@ -70,13 +101,13 @@
           field-type (doto (FieldType.) 
                        (.setStored store?) (.setIndexed index?) 
                        (.setTokenized analyzed?) (.setOmitNorms (not norms?)))
-          vt (class value)
-          field (condp = vt 
-                  String (Field. n value field-type)
-                  Integer (IntField. n value (doto field-type (.setNumericType FieldType$NumericType/INT)))
-                  Long (LongField. n value (doto field-type (.setNumericType FieldType$NumericType/LONG)))
-                  Float (FloatField. n value (doto field-type (.setNumericType FieldType$NumericType/FLOAT)))
-                  Double (DoubleField. n value (doto field-type (.setNumericType FieldType$NumericType/DOUBLE)))
+          vt (:type meta-map)
+          field (case vt 
+                  "string" (Field. n (as-str value) field-type)
+                  "int" (IntField. n (as-int value) (doto field-type (.setNumericType FieldType$NumericType/INT)))
+                  "long" (LongField. n (as-long value) (doto field-type (.setNumericType FieldType$NumericType/LONG)))
+                  "float" (FloatField. n (as-float value) (doto field-type (.setNumericType FieldType$NumericType/FLOAT)))
+                  "double" (DoubleField. n (as-double value) (doto field-type (.setNumericType FieldType$NumericType/DOUBLE)))
                   (Field. n (as-str value) field-type)
                   )
           ]
@@ -104,8 +135,8 @@
   [map]
   (let [document (Document.)]
     (doseq [[key value] map]
-      (if (coll? value) (doseq [v value] (add-field document key v (key (meta map))))
-        (add-field document key value (key (meta map)))))
+      (if (coll? value) (doseq [v value] (add-field document key v (key *schema-hints*)))
+        (add-field document key value (key *schema-hints*))))
     (if *content*
       (add-field document :_content (concat-values map)))
     document))
@@ -127,12 +158,12 @@
         (doseq [[key value] m]
           (.add query
                 (BooleanClause.
-                  (let [vt (class value)  field (.toLowerCase (as-str key))]
-                    (condp = vt
-                      Integer  (NumericRangeQuery/newIntRange field value value true true)
-                      Float  (NumericRangeQuery/newFloatRange field value value true true)
-                      Long  (NumericRangeQuery/newLongRange field value value true true)
-                      Double  (NumericRangeQuery/newDoubleRange field value value true true)
+                  (let [vt (-> key keyword *schema-hints* :type)  field (.toLowerCase (as-str key))]
+                    (case vt
+                      "int"  (NumericRangeQuery/newIntRange field (as-int value) (as-int value) true true)
+                      "float"  (NumericRangeQuery/newFloatRange field (as-float value) (as-float value) true true)
+                      "long"  (NumericRangeQuery/newLongRange field (as-long value) (as-long value) true true)
+                      "double"  (NumericRangeQuery/newDoubleRange field (as-double value) (as-double value) true true)
                       (TermQuery. (Term. field (.toLowerCase (as-str value)))) ))
                  BooleanClause$Occur/MUST)))
         (.deleteDocuments writer query)))))
@@ -144,19 +175,20 @@
   ([^Document document score highlighter]
      (let [m (apply merge-with  (fn [a b] (if (coll? a) (conj a b) [a b]))
                     (for [^Field f (.getFields document)]
-                        {(keyword (.name f)) (or (.numericValue f) (.stringValue f))}))
-           fragments (highlighter m) ; so that we can highlight :_content
-           m (dissoc m :_content)]
-       (with-meta
-         m
-         (-> (into {}
-                   (for [^Field f (.getFields document)
-                         :let [field-type (.fieldType f)]]
-                     [(keyword (.name f)) {:indexed (.indexed field-type)
-                                           :stored (.stored field-type)
-                                           :tokenized (.tokenized field-type)}]))
-             (assoc :_fragments fragments :_score score)
-             (dissoc :_content))))))
+                        {(keyword (.name f)) (or (.numericValue f) (.stringValue f))}))]
+       (if-not *doc-with-meta?* m
+                (with-meta
+					         (dissoc m :_content)
+					         (-> (into {}
+					                   (for [^Field f (.getFields document)
+					                         :let [field-type (.fieldType f)]]
+					                     [(keyword (.name f)) {:indexed (.indexed field-type)
+					                                           :stored (.stored field-type)
+					                                           :tokenized (.tokenized field-type)}]))
+					             (assoc :_fragments (highlighter m) ; so that we can highlight :_content
+					                    :_score score)
+					             (dissoc :_content))))
+)))
 
 (defn- make-highlighter
   "Create a highlighter function which will take a map and return highlighted
@@ -188,7 +220,7 @@ fragments."
 (defn make-parser [default-field]
   (proxy [QueryParser] [*version* (as-str default-field) *analyzer*]
     (newTermQuery [term]
-      (if-let [num-type (*numeric-hints* (.field term))]
+      (if-let [num-type (-> term .field  keyword *schema-hints* :type)]
         (case num-type
           "long" (let [v (-> term .text Long/parseLong)] (NumericRangeQuery/newLongRange (.field term)  v v true true))
           "int" (let [v (-> term .text Integer/parseInt)] (NumericRangeQuery/newIntRange (.field term)  v v true true))
@@ -196,7 +228,7 @@ fragments."
           "float" (let [v (-> term .text Float/parseFloat)] (NumericRangeQuery/newFloatRange (.field term)  v v true true)))
         (proxy-super newTermQuery term)))
     (newRangeQuery [field from to start-include? end-include?]
-      (if-let [num-type (*numeric-hints* field)]
+      (if-let [num-type (-> field keyword *schema-hints* :type)]
         (case num-type
           "long" (let [start (-> from Long/parseLong), end (-> to Long/parseLong)] (NumericRangeQuery/newLongRange field  start end true true))
           "int" (let [start (-> from Integer/parseInt), end (-> to Integer/parseInt)] (NumericRangeQuery/newIntRange field  start end true true))
@@ -240,7 +272,9 @@ of the results."
   ([index query]
      (if *content*
        (search-and-delete index query :_content)
-       (throw (Exception. "No default search field specified"))))
+       ;(throw (Exception. "No default search field specified"))
+       (search-and-delete index query nil)
+       ))
   ([index query default-field]
      (with-open [writer (index-writer index)]
        (let [parser (QueryParser. *version* (as-str default-field) *analyzer*)
