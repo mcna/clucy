@@ -83,7 +83,7 @@ By default, every field is a string stored, indexed, analyzed and stores norms. 
 ```
 
 ```clojure
-(binding [*schema-hints* people-schema]
+(binding [clucy/*schema-hints* people-schema]
 ;.... do some adding
 ;.....do some query
 )
@@ -102,7 +102,7 @@ You can add maps with numeric value to the index:
 ```
 
 ```clojure
-(binding [*schema-hints* people-schema]
+(binding [clucy/*schema-hints* people-schema]
     (clucy/add index
        {:name "Bob", :age (int 20)}
        {:name "Donald", :age (int 35)}))
@@ -111,7 +111,7 @@ You can add maps with numeric value to the index:
 Once maps have been added, the index can be searched:
 
 ```clojure
-	user=> (binding [*schema-hints* people-schema]
+	user=> (binding [clucy/*schema-hints* people-schema]
 	      (clucy/search index "age:20" 10))
 	({:age 20, :name "Bob"})
 ```
@@ -119,7 +119,7 @@ Once maps have been added, the index can be searched:
 Or do range query just as :
 
 ```clojure
-	user=> (binding [*schema-hints* people-schema]
+	user=> (binding [clucy/*schema-hints* people-schema]
    	      (clucy/search index "age:[32 TO 35]" 10))
 	({:age 35, :name "Donald"})
 ```
@@ -148,7 +148,7 @@ First add some documents with a defined schema
 ```clojure
 (def people-schema {:name {} :age {:type "int", :analyzed false, :norms false }})
 
-(binding [*schema-hints* people-schema]
+(binding [clucy/*schema-hints* people-schema]
     (clucy/add index
        {:name "Bob", :age (int 20)}
        {:name "Donald", :age (int 35)}))
@@ -157,7 +157,7 @@ First add some documents with a defined schema
 Then you can sort the result when search them :
 
 ```clojure
-user=> ((binding [*schema-hints* people-schema]
+user=> ((binding [clucy/*schema-hints* people-schema]
           (clucy/search index "*:*" 10 :sort-by "age desc"))
 ({:age 35, :name "Donald"} {:age 20, :name "Bob"})
 ```
@@ -165,21 +165,21 @@ user=> ((binding [*schema-hints* people-schema]
 You can sort by several fields just like :
 
 ```clojure
-((binding [*schema-hints* people-schema]
+((binding [clucy/*schema-hints* people-schema]
           (clucy/search index "*:*" 10 :sort-by "age desc, name asc"))
 ```
 
 Or sort  by document number (index order) :
 
 ```clojure
-((binding [*schema-hints* people-schema]
+((binding [clucy/*schema-hints* people-schema]
           (clucy/search index "*:*" 10 :sort-by "$doc asc"))
 ```
           
 Or sort by  document score (relevance):
 
 ```clojure
-((binding [*schema-hints* people-schema]
+((binding [clucy/*schema-hints* people-schema]
           (clucy/search index "*:*" 10 :sort-by "$score asc"))
 ```
 
