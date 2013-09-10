@@ -87,7 +87,7 @@
            (let [index (memory-index), total (atom 0) rc (atom 0),  reportor (fn [c] (swap! rc inc) (swap! total + c))]
              (padd index reportor (for [i (range 1234567)] {:id i }))
              (is (= 1234567 @rc))
-             (is (< (/ (* 1234567 1234568) 2) @total))
+             (is (= (/ (* 1234567 1234568) 2) @total))
              (is (= 1234567 (-> (search index "*:*" 1) (meta) :_total-hits)))))
   
   (testing "pagination"

@@ -168,8 +168,7 @@
                             (doseq [m maps]
 													      (.addDocument writer
 													                    (map->document m))
-				                        (swap! c inc)
-                            (process-reporter @c)))
+                            (process-reporter (swap! c inc))))
                       (partition-all 100000 large-maps)
                    ) ))))))
 

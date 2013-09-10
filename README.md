@@ -20,7 +20,7 @@ To install Clucy, add the following dependency to your `project.clj`
 file:
 
 ```clojure
-    [zclucy "0.8.0"]
+    [zclucy "0.8.1"]
 ```
 
 Usage
@@ -212,10 +212,11 @@ When you want to index a large number of data such as data from a large text fil
 
 ```clojure
     (with-open [r (clojure.java.io/reader file)]
-              (let [stime (System/currentTimeMillis)
-                      c (atom 0)
-                      collector (fn [n] (swap! c + n) (println @c " cost:"(- (System/currentTimeMillis) stime))) ]
-                (clucy/padd index collector 
+       (let [stime (System/currentTimeMillis)
+               reporter (fn [n] 
+                                 (when (= (mod n 100000)  ; print process per 100K
+                                   (println n " cost:"(- (System/currentTimeMillis) stime)))) ]
+                (clucy/padd index reporter 
                       (map 
                               #(let [row (clojure.string/split % #"\s+")] 
                                                 {:id (row 0), :name (row 1) })
