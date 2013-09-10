@@ -214,7 +214,7 @@ When you want to index a large number of data such as data from a large text fil
     (with-open [r (clojure.java.io/reader file)]
        (let [stime (System/currentTimeMillis)
                reporter (fn [n] 
-                                 (when (= (mod n 100000)  ; print process per 100K
+                                 (when (= (mod n 100000) 0) ; print process per 100K
                                    (println n " cost:"(- (System/currentTimeMillis) stime)))) ]
                 (clucy/padd index reporter 
                       (map 
