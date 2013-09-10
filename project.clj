@@ -1,11 +1,11 @@
-(defproject zclucy "0.7.0"
+(defproject zclucy "0.8.0"
   :description "A Clojure interface to the Lucene search engine"
   :url "http://github/yxzhang/clucy"
   :dependencies [[org.clojure/clojure "1.4.0"]
-                 [org.apache.lucene/lucene-core "4.2.0"]
-                 [org.apache.lucene/lucene-queryparser "4.2.0"]
-                 [org.apache.lucene/lucene-analyzers-common "4.2.0"]
-                 [org.apache.lucene/lucene-highlighter "4.2.0"]]
+                 [org.apache.lucene/lucene-core "4.4.0"]
+                 [org.apache.lucene/lucene-queryparser "4.4.0"]
+                 [org.apache.lucene/lucene-analyzers-common "4.4.0"]
+                 [org.apache.lucene/lucene-highlighter "4.4.0"]]
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :profiles {:1.4  {:dependencies [[org.clojure/clojure "1.4.0"]]}

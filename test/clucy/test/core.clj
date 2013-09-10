@@ -73,6 +73,23 @@
       (is (pos? (:_max-score (meta results))))
       (is (= (count people) (:_total-hits (meta (search index "*:*" 2)))))))
 
+  (testing "define schema as index meta and test it"
+           (let [index (memory-index {:*content* false, :*doc-with-meta?* false,  :age {:type "int"}})
+                   _ (doseq [person people] (add index person))
+                 r  (search index "age:48" 10) ]
+             (is (= 1 (:_total-hits (meta r) )))
+             (is (= 1 (count r)))
+             (is (= {:name "Mary" :age 48} (first r)))
+             (is (nil? (meta (first r))))
+             ))
+  
+  (testing "parallel index"
+           (let [index (memory-index), total (atom 0) rc (atom 0),  reportor (fn [c] (swap! rc inc) (swap! total + c))]
+             (padd index reportor (for [i (range 1234567)] {:id i }))
+             (is (= 1234567 @rc))
+             (is (< (/ (* 1234567 1234568) 2) @total))
+             (is (= 1234567 (-> (search index "*:*" 1) (meta) :_total-hits)))))
+  
   (testing "pagination"
     (let [index (memory-index)]
       (doseq [person people] (add index person))

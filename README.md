@@ -9,6 +9,8 @@ There are some enhanced futures in ZClucy :
 1. Supports numeric values (such as int, long, float double)  
 1. Supports multivalued fileds.
 1. Supports sort
+1. Supports parallel indexing large number of data
+1. Supports schema defined as index's  metadata
 
 
 Installation
@@ -18,7 +20,7 @@ To install Clucy, add the following dependency to your `project.clj`
 file:
 
 ```clojure
-    [zclucy "0.7.0"]
+    [zclucy "0.8.0"]
 ```
 
 Usage
@@ -86,6 +88,26 @@ By default, every field is a string stored, indexed, analyzed and stores norms. 
 (binding [clucy/*schema-hints* people-schema]
 ;.... do some adding
 ;.....do some query
+)
+```
+
+Or you can add a schema with index when creating it :
+
+```clojure
+(def index (clucy/memory-index people-schema))
+```
+
+Then you need not  bind *schema-hints* anymore. Now here two statements get the same result :
+
+```clojure
+(clucy/add ....)
+(clucy/add ....)
+```
+
+```clojure
+(binding [clucy/*schema-hints* people-schema]
+	(clucy/add ....)
+	(clucy/add ....)
 )
 ```
 
@@ -181,6 +203,21 @@ Or sort by  document score (relevance):
 ```clojure
 ((binding [clucy/*schema-hints* people-schema]
           (clucy/search index "*:*" 10 :sort-by "$score asc"))
+```
+
+Parallel indexing
+--------------------
+
+When you want to index a large number of data such as data from a large text file with one record per line,  you should use padd instead of add
+
+```clojure
+    (with-open [r (clojure.java.io/reader file)]
+              (let [stime (System/currentTimeMillis), c (atom 0), collector (fn [n] (swap! c + n) (println @c " cost:"(- (System/currentTimeMillis) stime))) ]
+                (clucy/padd index collector 
+                      (map 
+                              #(let [row (clojure.string/split % #"\s+")] 
+                                                {:id (row 0), :name (row 1) })
+                                                 (line-seq r)))))
 ```
 
 Default Search Field

@@ -14,7 +14,7 @@
            (org.apache.lucene.util Version AttributeSource)
            (org.apache.lucene.store NIOFSDirectory RAMDirectory Directory)))
 
-(def ^{:dynamic true} *version* Version/LUCENE_CURRENT)
+(def ^{:dynamic true} *version* Version/LUCENE_44)
 
 (def ^{:dynamic true} *analyzer* (StandardAnalyzer. *version*))
 
@@ -23,7 +23,7 @@
 ;; flag to indicate a default "_content" field should be maintained
 (def ^{:dynamic true} *content* true)
 
-(def ^:dynamic *schema-hints* {})
+(def ^:dynamic  *schema-hints* {:*content* true,  :*doc-with-meta?* true})
 
 (defn as-int ^Integer [x]
   (cond
@@ -60,13 +60,17 @@
 
 (defn memory-index
   "Create a new index in RAM."
-  []
-  (RAMDirectory.))
+  ([]
+    (RAMDirectory.))
+  ([schema-hints]
+    (proxy [RAMDirectory  clojure.lang.IMeta] [] (meta [] schema-hints))))
 
 (defn disk-index
   "Create a new index in a directory on disk."
-  [^String dir-path]
-  (NIOFSDirectory. (File. dir-path)))
+  ([^String dir-path]
+    (NIOFSDirectory. (File. dir-path)))
+  ([^String dir-path schema-hints]
+    (proxy [NIOFSDirectory clojure.lang.IMeta] [dir-path] (meta [] schema-hints))))
 
 (defn- index-writer
   "Create an IndexWriter."
@@ -144,29 +148,52 @@
 (defn add
   "Add hash-maps to the search index."
   [index & maps]
-  (with-open [writer (index-writer index)]
-    (doseq [m maps]
-      (.addDocument writer
-                    (map->document m)))))
+  (binding [*schema-hints* (or (meta index) *schema-hints*)] 
+    (binding [*doc-with-meta?* (and *doc-with-meta?*  (-> :*doc-with-meta?*  *schema-hints* false? not))
+              *content* (and *content* (-> :*content*  *schema-hints* false? not))]
+    (with-open [writer (index-writer index)]
+      (doseq [m maps]
+        (.addDocument writer
+                    (map->document m)))))))
+
+(defn padd
+  "Parallel add hash-maps to the search index."
+  [index process-reporter  large-maps]
+  (binding [*schema-hints* (or (meta index) *schema-hints*)] 
+    (binding [*doc-with-meta?* (and *doc-with-meta?*  (-> :*doc-with-meta?*  *schema-hints* false? not))
+              *content* (and *content* (-> :*content*  *schema-hints* false? not))]
+      (with-open [writer (index-writer index)]
+        (let [c (atom 0)]
+         (dorun (pmap (fn [maps]
+                            (doseq [m maps]
+													      (.addDocument writer
+													                    (map->document m))
+				                        (swap! c inc)
+                            (process-reporter @c)))
+                      (partition-all 100000 large-maps)
+                   ) ))))))
 
 (defn delete
   "Deletes hash-maps from the search index."
   [index & maps]
-  (with-open [writer (index-writer index)]
-    (doseq [m maps]
-      (let [query (BooleanQuery.)]
-        (doseq [[key value] m]
-          (.add query
-                (BooleanClause.
-                  (let [vt (-> key keyword *schema-hints* :type)  field (.toLowerCase (as-str key))]
-                    (case vt
-                      "int"  (NumericRangeQuery/newIntRange field (as-int value) (as-int value) true true)
-                      "float"  (NumericRangeQuery/newFloatRange field (as-float value) (as-float value) true true)
-                      "long"  (NumericRangeQuery/newLongRange field (as-long value) (as-long value) true true)
-                      "double"  (NumericRangeQuery/newDoubleRange field (as-double value) (as-double value) true true)
-                      (TermQuery. (Term. field (.toLowerCase (as-str value)))) ))
-                 BooleanClause$Occur/MUST)))
-        (.deleteDocuments writer query)))))
+  (binding [*schema-hints* (or (meta index) *schema-hints*)] 
+    (binding [*doc-with-meta?* (and *doc-with-meta?*  (-> :*doc-with-meta?*  *schema-hints* false? not))
+              *content* (and *content* (-> :*content*  *schema-hints* false? not))]
+      (with-open [writer (index-writer index)]
+		    (doseq [m maps]
+		      (let [query (BooleanQuery.)]
+		        (doseq [[key value] m]
+		          (.add query
+		                (BooleanClause.
+		                  (let [vt (-> key keyword *schema-hints* :type)  field (.toLowerCase (as-str key))]
+		                    (case vt
+		                      "int"  (NumericRangeQuery/newIntRange field (as-int value) (as-int value) true true)
+		                      "float"  (NumericRangeQuery/newFloatRange field (as-float value) (as-float value) true true)
+		                      "long"  (NumericRangeQuery/newLongRange field (as-long value) (as-long value) true true)
+		                      "double"  (NumericRangeQuery/newDoubleRange field (as-double value) (as-double value) true true)
+		                      (TermQuery. (Term. field (.toLowerCase (as-str value)))) ))
+		                 BooleanClause$Occur/MUST)))
+		        (.deleteDocuments writer query)))))))
 
 (defn- document->map
   "Turn a Document object into a map."
@@ -258,31 +285,36 @@ fragments."
   [index query max-results
    & {:keys [highlight default-field default-operator page results-per-page sort-by]
       :or {page 0 results-per-page max-results}}]
-  (if (every? false? [default-field *content*])
-    (throw (Exception. "No default search field specified"))
-    (with-open [reader (index-reader index)]
-      (let [default-field (or default-field :_content)
-            searcher (IndexSearcher. reader)
-            parser (doto (make-parser default-field)
-                     (.setDefaultOperator (case (or default-operator :or)
-                                            :and QueryParser/AND_OPERATOR
-                                            :or  QueryParser/OR_OPERATOR)))
-            sort (make-sort sort-by)
-            query (if (= "*:*" query) (MatchAllDocsQuery.) (.parse parser query))
-            hits (if (nil? sort) (.search searcher query (int max-results))  (.search searcher query (int max-results) sort))
-            highlighter (make-highlighter query searcher highlight)
-            start (* page results-per-page)
-            end (min (+ start results-per-page) (.totalHits hits))]
-        (doall
-         (with-meta (for [hit (map (partial aget (.scoreDocs hits))
-                                   (range start end))]
-                      (document->map (.doc ^IndexSearcher searcher
-                                           (.doc ^ScoreDoc hit))
-                                     (.score ^ScoreDoc hit)
+  (binding [*schema-hints* (or (meta index) *schema-hints*)] 
+    (binding [*doc-with-meta?* (and *doc-with-meta?*  (-> :*doc-with-meta?*  *schema-hints* false? not))
+              *content* (and *content* (-> :*content*  *schema-hints* false? not))]
+            (if (every? false? [default-field *content*])
+					    (throw (Exception. "No default search field specified"))
+					    (with-open [reader (index-reader index)]
+					      (let [default-field (or default-field :_content)
+					            searcher (IndexSearcher. reader)
+					            parser (doto (make-parser default-field)
+					                     (.setDefaultOperator (case (or default-operator :or)
+					                                            :and QueryParser/AND_OPERATOR
+					                                            :or  QueryParser/OR_OPERATOR)))
+					            sort (make-sort sort-by)
+					            query (if (= "*:*" query) (MatchAllDocsQuery.) (.parse parser query))
+					            hits (if (nil? sort) (.search searcher query (int max-results))  (.search searcher query (int max-results) sort))
+					            highlighter (make-highlighter query searcher highlight)
+					            start (* page results-per-page)
+					            end (min (+ start results-per-page) (.totalHits hits))]
+					        (doall
+					         (with-meta (for [hit (map (partial aget (.scoreDocs hits))
+					                                   (range start end))]
+					                      (document->map (.doc ^IndexSearcher searcher
+					                                           (.doc ^ScoreDoc hit))
+					                                     (.score ^ScoreDoc hit)
+					
+					                                     highlighter))
+					           {:_total-hits (.totalHits hits)
+					            :_max-score (.getMaxScore hits)}))))))))
 
-                                     highlighter))
-           {:_total-hits (.totalHits hits)
-            :_max-score (.getMaxScore hits)}))))))
+
 
 (defn search-and-delete
   "Search the supplied index with a query string and then delete all
@@ -294,7 +326,11 @@ of the results."
        (search-and-delete index query nil)
        ))
   ([index query default-field]
-     (with-open [writer (index-writer index)]
-       (let [parser (QueryParser. *version* (as-str default-field) *analyzer*)
-             query  (.parse parser query)]
-         (.deleteDocuments writer query)))))
+  (binding [*schema-hints* (or (meta index) *schema-hints*)] 
+    (binding [*doc-with-meta?* (and *doc-with-meta?*  (-> :*doc-with-meta?*  *schema-hints* false? not))
+              *content* (and *content* (-> :*content*  *schema-hints* false? not))]
+           (with-open [writer (index-writer index)]
+				       (let [parser (QueryParser. *version* (as-str default-field) *analyzer*)
+				             query  (.parse parser query)]
+				         (.deleteDocuments writer query)))))))
+
