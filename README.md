@@ -212,7 +212,9 @@ When you want to index a large number of data such as data from a large text fil
 
 ```clojure
     (with-open [r (clojure.java.io/reader file)]
-              (let [stime (System/currentTimeMillis), c (atom 0), collector (fn [n] (swap! c + n) (println @c " cost:"(- (System/currentTimeMillis) stime))) ]
+              (let [stime (System/currentTimeMillis)
+                      c (atom 0)
+                      collector (fn [n] (swap! c + n) (println @c " cost:"(- (System/currentTimeMillis) stime))) ]
                 (clucy/padd index collector 
                       (map 
                               #(let [row (clojure.string/split % #"\s+")] 
