@@ -244,12 +244,15 @@ fragments."
 (defn make-parser [default-field]
   (proxy [QueryParser] [*version* (as-str default-field) *analyzer*]
     (newFieldQuery [ analyzer,  field,  queryText,  quoted]
-      (case (-> field keyword *schema-hints* :type)
-          "long" (let [v (-> queryText Long/parseLong)] (NumericRangeQuery/newLongRange field  v v true true))
-          "int" (let [v (-> queryText Integer/parseInt)] (NumericRangeQuery/newIntRange field v v true true))
-          "double" (let [v (-> queryText Double/parseDouble)] (NumericRangeQuery/newDoubleRange field  v v true true))
-          "float" (let [v (-> queryText Float/parseFloat)] (NumericRangeQuery/newFloatRange field  v v true true))
-          (proxy-super newFieldQuery analyzer field queryText quoted)))
+      (let [{:keys [type analyzed]} (-> field keyword *schema-hints*)]
+              (case type
+			          "long" (let [v (-> queryText Long/parseLong)] (NumericRangeQuery/newLongRange field  v v true true))
+			          "int" (let [v (-> queryText Integer/parseInt)] (NumericRangeQuery/newIntRange field v v true true))
+			          "double" (let [v (-> queryText Double/parseDouble)] (NumericRangeQuery/newDoubleRange field  v v true true))
+			          "float" (let [v (-> queryText Float/parseFloat)] (NumericRangeQuery/newFloatRange field  v v true true))
+                (if (false? analyzed) (proxy-super newTermQuery (Term.  field queryText))
+                  (proxy-super newFieldQuery analyzer field queryText quoted)))))
+    
     (newRangeQuery [field from to start-include? end-include?]
       (if-let [num-type (-> field keyword *schema-hints* :type)]
         (case num-type

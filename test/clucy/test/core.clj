@@ -3,7 +3,7 @@
         clojure.test
         [clojure.set :only [intersection]]))
 
-(def people-schema {:name {} :age {:type "int" }})
+(def people-schema {:name {} :age {:type "int" } :title {:type "string" :analyzed false}})
 
 (def people [{:name "Miles" :age 36}
              {:name "Emily" :age 0.3}
@@ -11,7 +11,8 @@
              {:name "Melinda" :age 34}
              {:name "Mary" :age 48}
              {:name "Mary Lou" :age 39}
-             {:name "Baby" :age -1}])
+             {:name "Baby" :age -1}
+             {:name "Jack" :age 21 :title "A.B"}])
 
 (deftest core
 
@@ -49,7 +50,8 @@
       (is (= [ {:name "Mary" :age 48} {:name "Mary Lou" :age 39}] 
                (search index "age:[39 TO 48]" 10)) )
       (is (= {:name "Mary" :age 48} (first (search index "*:*" 10 :sort-by "age desc"))))
-      (is (= {:name "Baby" :age -1} (first (search index "age:\\-1" 10)) )))))
+      (is (= {:name "Baby" :age -1} (first (search index "age:\\-1" 10)) ))
+      (is (= {:name "Jack" :age 21 :title "A.B"} (first (search index "title:A.B" 10)))))))
 
   (testing "search-and-delete fn"
     (binding [*schema-hints* people-schema]
