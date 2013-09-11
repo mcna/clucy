@@ -20,7 +20,7 @@ To install Clucy, add the following dependency to your `project.clj`
 file:
 
 ```clojure
-    [zclucy "0.8.5"]
+    [zclucy "0.8.6"]
 ```
 
 Usage
