@@ -70,7 +70,7 @@
   ([^String dir-path]
     (NIOFSDirectory. (File. dir-path)))
   ([^String dir-path schema-hints]
-    (proxy [NIOFSDirectory clojure.lang.IMeta] [dir-path] (meta [] schema-hints))))
+    (proxy [NIOFSDirectory clojure.lang.IMeta] [(File. dir-path)] (meta [] schema-hints))))
 
 (defn- index-writer
   "Create an IndexWriter."
@@ -99,20 +99,18 @@
     (let [n (name key)
           store? (not (false? (:stored meta-map)))
           index? (not (false? (:indexed meta-map)))
-          analyzed? (not (false? (:analyzed meta-map)))
-          norms? (not (false? (:norms meta-map)))
-          
-          field-type (doto (FieldType.) 
-                       (.setStored store?) (.setIndexed index?) 
-                       (.setTokenized analyzed?) (.setOmitNorms (not norms?)))
           vt (:type meta-map)
           field (case vt 
-                  "string" (Field. n (as-str value) field-type)
-                  "int" (IntField. n (as-int value) (doto field-type (.setNumericType FieldType$NumericType/INT)))
-                  "long" (LongField. n (as-long value) (doto field-type (.setNumericType FieldType$NumericType/LONG)))
-                  "float" (FloatField. n (as-float value) (doto field-type (.setNumericType FieldType$NumericType/FLOAT)))
-                  "double" (DoubleField. n (as-double value) (doto field-type (.setNumericType FieldType$NumericType/DOUBLE)))
-                  (Field. n (as-str value) field-type)
+                  "int" (IntField. n (as-int value) (if store? IntField/TYPE_STORED IntField/TYPE_NOT_STORED))
+                  "long" (LongField. n (as-long value)  (if store? LongField/TYPE_STORED LongField/TYPE_NOT_STORED))
+                  "float" (FloatField. n (as-float value)  (if store? FloatField/TYPE_STORED FloatField/TYPE_NOT_STORED))
+                  "double" (DoubleField. n (as-double value)  (if store? DoubleField/TYPE_STORED DoubleField/TYPE_NOT_STORED))
+                  (let [analyzed? (not (false? (:analyzed meta-map)))
+                          norms? (not (false? (:norms meta-map)))
+                          field-type (doto (FieldType.) 
+                       (.setStored store?) (.setIndexed index?) 
+                       (.setTokenized analyzed?) (.setOmitNorms (not norms?)))] 
+                    (Field. n (as-str value) field-type))
                   )
           ]
       (.add ^Document document field))))
@@ -245,14 +243,13 @@ fragments."
 
 (defn make-parser [default-field]
   (proxy [QueryParser] [*version* (as-str default-field) *analyzer*]
-    (newTermQuery [term]
-      (if-let [num-type (-> term .field  keyword *schema-hints* :type)]
-        (case num-type
-          "long" (let [v (-> term .text Long/parseLong)] (NumericRangeQuery/newLongRange (.field term)  v v true true))
-          "int" (let [v (-> term .text Integer/parseInt)] (NumericRangeQuery/newIntRange (.field term)  v v true true))
-          "double" (let [v (-> term .text Double/parseDouble)] (NumericRangeQuery/newDoubleRange (.field term)  v v true true))
-          "float" (let [v (-> term .text Float/parseFloat)] (NumericRangeQuery/newFloatRange (.field term)  v v true true)))
-        (proxy-super newTermQuery term)))
+    (newFieldQuery [ analyzer,  field,  queryText,  quoted]
+      (case (-> field keyword *schema-hints* :type)
+          "long" (let [v (-> queryText Long/parseLong)] (NumericRangeQuery/newLongRange field  v v true true))
+          "int" (let [v (-> queryText Integer/parseInt)] (NumericRangeQuery/newIntRange field v v true true))
+          "double" (let [v (-> queryText Double/parseDouble)] (NumericRangeQuery/newDoubleRange field  v v true true))
+          "float" (let [v (-> queryText Float/parseFloat)] (NumericRangeQuery/newFloatRange field  v v true true))
+          (proxy-super newFieldQuery analyzer field queryText quoted)))
     (newRangeQuery [field from to start-include? end-include?]
       (if-let [num-type (-> field keyword *schema-hints* :type)]
         (case num-type
