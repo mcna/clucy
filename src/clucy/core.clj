@@ -259,7 +259,7 @@ fragments."
           "long" (let [start (-> from Long/parseLong), end (-> to Long/parseLong)] (NumericRangeQuery/newLongRange field  start end true true))
           "int" (let [start (-> from Integer/parseInt), end (-> to Integer/parseInt)] (NumericRangeQuery/newIntRange field  start end true true))
           "double" (let [start (-> from Double/parseDouble) end (-> to Double/parseDouble)] (NumericRangeQuery/newDoubleRange field  start end true true))
-          "float" (let [start (-> from  Float/parseFloat) end (-> to Double/parseDouble)] (NumericRangeQuery/newFloatRange field  start end true true)))
+          "float" (let [start (-> from  Float/parseFloat) end (-> to Float/parseFloat)] (NumericRangeQuery/newFloatRange field  start end true true)))
         (proxy-super newRangeQuery field from to start-include? end-include?)))))
 
 (defn make-sort 
