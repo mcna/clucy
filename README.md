@@ -81,7 +81,7 @@ Manipulate Schema
 By default, every field is a string stored, indexed, analyzed and stores norms. You can customise it just like :
 
 ```clojure
-(def people-schema {:name {} :age {:type "int", :analyzed false, :norms false }})
+(def people-schema {:name {} :age {:type "int" }})
 ```
 
 ```clojure
@@ -120,7 +120,7 @@ Numeric Types
 You can add maps with numeric value to the index:
 
 ```clojure
-(def people-schema {:name {} :age {:type "int", :analyzed false, :norms false }})
+(def people-schema {:name {} :age {:type "int"}})
 ```
 
 ```clojure
@@ -168,7 +168,7 @@ Sort Results
 First add some documents with a defined schema
 
 ```clojure
-(def people-schema {:name {} :age {:type "int", :analyzed false, :norms false }})
+(def people-schema {:name {} :age {:type "int" }})
 
 (binding [clucy/*schema-hints* people-schema]
     (clucy/add index
