@@ -8,8 +8,8 @@
                                        DocumentStoredFieldVisitor)
            (org.apache.lucene.index IndexWriter IndexReader Term
                                     IndexWriterConfig DirectoryReader FieldInfo)
-           (org.apache.lucene.queryparser.classic QueryParser)
-           (org.apache.lucene.search BooleanClause BooleanClause$Occur
+           (org.apache.lucene.queryparser.classic QueryParserBase QueryParser)
+           (org.apache.lucene.search BooleanClause BooleanClause$Occur TopDocs
                                      BooleanQuery IndexSearcher Query ScoreDoc  Sort SortField SortField$Type
                                      Scorer TermQuery MatchAllDocsQuery NumericRangeQuery)
            (org.apache.lucene.search.highlight Highlighter QueryScorer
@@ -138,11 +138,11 @@
 (defn make-id-md5 
   "idv :  the vector of id fields, m : map"
   [idv m]
-  (let [bytes (->> idv  (map m) (clojure.string/join "\n~\t!@") (#(.getBytes % "utf-8")))
-            md (doto (MessageDigest/getInstance "MD5") (.reset) (.update  bytes))]
+  (let [bytes (->> idv  (map m) (clojure.string/join "\n~\t!@") (#(.getBytes ^String % "utf-8")))
+            md (doto ^ MessageDigest (MessageDigest/getInstance "MD5") (.reset) (.update  ^bytes bytes))]
          (.digest  ^MessageDigest  md)))
 
-(defn md5-to-hex [md5]
+(defn ^String md5-to-hex [^bytes md5]
   (.toString (BigInteger. md5 ) 16))
 
 (def  id-field-type (doto (FieldType.) (.setIndexed true) (.setStored false) (.setTokenized false) (.setOmitNorms true)))
@@ -152,7 +152,7 @@
   [m]
   (if-let [idv (:_id *schema-hints*)]
     (if (> (count idv) 1)
-      (Field. "_id"   (md5-to-hex (make-id-md5 idv m)) id-field-type))))
+      (Field. "_id"  ^String (md5-to-hex (make-id-md5 idv m)) ^FieldType  id-field-type))))
 
 
 
@@ -285,35 +285,37 @@ fragments."
                              ^String separator))))
     (constantly nil)))
 
-(defn make-parser [default-field]
+
+(defn ^QueryParser make-parser [default-field]
   (proxy [QueryParser] [*version* (as-str default-field) *analyzer*]
-    (newFieldQuery [ analyzer,  field,  queryText,  quoted]
+    (newFieldQuery [^Analyzer analyzer,  ^String field,  ^String queryText,  quoted]
       (let [{:keys [type analyzed]} (-> field keyword *schema-hints*)]
               (case type
 			          "long" (let [v (-> queryText Long/parseLong)] (NumericRangeQuery/newLongRange field  v v true true))
 			          "int" (let [v (-> queryText Integer/parseInt)] (NumericRangeQuery/newIntRange field v v true true))
 			          "double" (let [v (-> queryText Double/parseDouble)] (NumericRangeQuery/newDoubleRange field  v v true true))
 			          "float" (let [v (-> queryText Float/parseFloat)] (NumericRangeQuery/newFloatRange field  v v true true))
-                (if (false? analyzed) (proxy-super newTermQuery (Term.  field queryText))
-                  (proxy-super newFieldQuery analyzer field queryText quoted)))))
+                (if (false? analyzed) (proxy-super newTermQuery (Term.   field queryText))
+                  (let [^QueryParser this this] (proxy-super newFieldQuery analyzer field queryText quoted))))))
     
-    (newRangeQuery [field from to start-include? end-include?]
+    (newRangeQuery [^String field ^String from ^String to   start-include?  end-include?]
       (if-let [num-type (-> field keyword *schema-hints* :type)]
         (case num-type
           "long" (let [start (-> from Long/parseLong), end (-> to Long/parseLong)] (NumericRangeQuery/newLongRange field  start end true true))
           "int" (let [start (-> from Integer/parseInt), end (-> to Integer/parseInt)] (NumericRangeQuery/newIntRange field  start end true true))
           "double" (let [start (-> from Double/parseDouble) end (-> to Double/parseDouble)] (NumericRangeQuery/newDoubleRange field  start end true true))
           "float" (let [start (-> from  Float/parseFloat) end (-> to Float/parseFloat)] (NumericRangeQuery/newFloatRange field  start end true true)))
-        (proxy-super newRangeQuery field from to start-include? end-include?)))))
+        (let [^QueryParser this this ] (proxy-super  newRangeQuery field from to start-include? end-include?))))))
 
-(defn make-sort 
+
+(defn ^Sort make-sort 
   "make sort from sort-str such as \"name asc, age desc\""
   [sort-str]
   (if (nil? sort-str) nil
     (let [sort (Sort.)]
       (doseq [[field flag] (partition-all 2 (clojure.string/split sort-str #",\s*|\s+"))]
-      (.setSort sort (SortField. field
-                        (case (-> field (keyword) *schema-hints* :type)
+      (.setSort sort (SortField. ^String field
+                        ^SortField$Type (case (-> field (keyword) *schema-hints* :type)
                               "long" SortField$Type/LONG
                               "int" SortField$Type/INT
                               "double" SortField$Type/DOUBLE
@@ -335,14 +337,14 @@ fragments."
 					    (throw (Exception. "No default search field specified"))
 					    (with-open [reader (index-reader index)]
 					      (let [default-field (or default-field :_content)
-					            searcher (IndexSearcher. reader)
+					            ^IndexSearcher searcher (IndexSearcher. reader)
 					            parser (doto (make-parser default-field)
 					                     (.setDefaultOperator (case (or default-operator :or)
 					                                            :and QueryParser/AND_OPERATOR
 					                                            :or  QueryParser/OR_OPERATOR)))
 					            sort (make-sort sort-by)
-					            query (if (= "*:*" query) (MatchAllDocsQuery.) (.parse parser query))
-					            hits (if (nil? sort) (.search searcher query (int max-results))  (.search searcher query (int max-results) sort))
+					            ^Query query (if (= "*:*" query) (MatchAllDocsQuery.) (.parse parser query))
+					            ^TopDocs hits (if (nil? sort) (.search searcher query (int max-results))  (.search searcher query (int max-results) sort))
 					            highlighter (make-highlighter query searcher highlight)
 					            start (* page results-per-page)
                       total (.totalHits hits)
@@ -351,14 +353,14 @@ fragments."
              (if doc-collector 
                (doseq [i (range start end) :let [hit (aget (.scoreDocs hits) i)]]
                                            (doc-collector (document->map 
-                                                                      (.doc ^IndexSearcher searcher (.doc ^ScoreDoc hit)  field-set)
+                                                                      (.doc ^IndexSearcher searcher (.doc ^ScoreDoc hit)  ^java.util.Set field-set)
 					                                                            (.score ^ScoreDoc hit)
 					                                                             highlighter)
                                                           i total))
                (doall
 					         (with-meta (for [i (range start end) :let [hit (aget (.scoreDocs hits) i)]]
                                            (document->map 
-                                               (.doc ^IndexSearcher searcher (.doc ^ScoreDoc hit)  field-set)
+                                               (.doc ^IndexSearcher searcher (.doc ^ScoreDoc hit)  ^java.util.Set  field-set)
 					                                     (.score ^ScoreDoc hit)
 					                                     highlighter))
 					           {:_total-hits (.totalHits hits)
