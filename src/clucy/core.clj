@@ -88,6 +88,25 @@
   [index]
   (DirectoryReader/open ^Directory index))
 
+  (def numeric-field-typs {
+                           "int" {"truetrue" IntField/TYPE_STORED, 
+                                  "truefalse" (doto (FieldType. IntField/TYPE_STORED) (.setIndexed false))
+                                  "falsetrue" IntField/TYPE_NOT_STORED
+                                  }
+                             "long" {"truetrue" LongField/TYPE_STORED, 
+                                  "truefalse" (doto (FieldType. LongField/TYPE_STORED) (.setIndexed false))
+                                  "falsetrue" LongField/TYPE_NOT_STORED
+                                  }
+                              "float" {"truetrue" FloatField/TYPE_STORED, 
+                                  "truefalse" (doto (FieldType. FloatField/TYPE_STORED) (.setIndexed false))
+                                  "falsetrue" FloatField/TYPE_NOT_STORED
+                                  }
+                               "double" {"truetrue" DoubleField/TYPE_STORED, 
+                                  "truefalse" (doto (FieldType. DoubleField/TYPE_STORED) (.setIndexed false))
+                                  "falsetrue" DoubleField/TYPE_NOT_STORED
+                                  }
+                           })
+
 (defn- add-field
   "Add a Field to a Document.
   Following options are allowed for meta-map:
@@ -97,17 +116,17 @@
   :norms - when :indexed is enabled user this option to disable/enable the storing of norms."
   ([document key value]
      (add-field document key value {}))
-
   ([document key value meta-map]
     (let [n (name key)
           store? (not (false? (:stored meta-map)))
           index? (not (false? (:indexed meta-map)))
           vt (:type meta-map)
+          ft (if-let [ftm (numeric-field-typs vt)] (ftm (str store? index?))  )
           field (case vt 
-                  "int" (IntField. n (as-int value) (if store? IntField/TYPE_STORED IntField/TYPE_NOT_STORED))
-                  "long" (LongField. n (as-long value)  (if store? LongField/TYPE_STORED LongField/TYPE_NOT_STORED))
-                  "float" (FloatField. n (as-float value)  (if store? FloatField/TYPE_STORED FloatField/TYPE_NOT_STORED))
-                  "double" (DoubleField. n (as-double value)  (if store? DoubleField/TYPE_STORED DoubleField/TYPE_NOT_STORED))
+                  "int" (IntField. n (as-int value) ft )
+                  "long" (LongField. n (as-long value)  ft )
+                  "float" (FloatField. n (as-float value)  ft )
+                  "double" (DoubleField. n (as-double value)  ft)
                   (let [analyzed? (not (false? (:analyzed meta-map)))
                           norms? (not (false? (:norms meta-map)))
                           field-type (doto (FieldType.) 

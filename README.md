@@ -22,7 +22,7 @@ To install Clucy, add the following dependency to your `project.clj`
 file:
 
 ```clojure
-    [zclucy "0.9.1"]
+    [zclucy "0.9.2"]
 ```
 
 Usage
