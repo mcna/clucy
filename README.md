@@ -8,9 +8,11 @@ There are some enhanced futures in ZClucy :
 
 1. Supports numeric values (such as int, long, float double)  
 1. Supports multivalued fileds.
-1. Supports sort
+1. Supports to sort results
 1. Supports parallel indexing large number of data
 1. Supports schema defined as index's  metadata
+1. Supports upsert (Insert documents or update them if they exist)
+1. Supports to only load certain stored fields and fast collect field values for statistics   (eg. sum, avg )
 
 
 Installation
@@ -81,7 +83,7 @@ Manipulate Schema
 By default, every field is a string stored, indexed, analyzed and stores norms. You can customise it just like :
 
 ```clojure
-(def people-schema {:name {} :age {:type "int" }})
+(def people-schema {:name {:type "string"} :age {:type "int" }})
 ```
 
 ```clojure
@@ -91,7 +93,7 @@ By default, every field is a string stored, indexed, analyzed and stores norms. 
 )
 ```
 
-Or you can add a schema with index when creating it :
+Or you can add a schema with index when create it :
 
 ```clojure
 (def index (clucy/memory-index people-schema))
@@ -120,7 +122,7 @@ Numeric Types
 You can add maps with numeric value to the index:
 
 ```clojure
-(def people-schema {:name {} :age {:type "int"}})
+(def people-schema {:name {:type "string"} :age {:type "int"}})
 ```
 
 ```clojure
@@ -168,7 +170,7 @@ Sort Results
 First add some documents with a defined schema
 
 ```clojure
-(def people-schema {:name {} :age {:type "int" }})
+(def people-schema {:name {:type "string"} :age {:type "int" }})
 
 (binding [clucy/*schema-hints* people-schema]
     (clucy/add index
@@ -222,6 +224,45 @@ When you want to index a large number of data such as data from a large text fil
                                                 {:id (row 0), :name (row 1) })
                                                  (line-seq r)))))
 ```
+
+Upsert
+--------------------
+Before use upsert , you must define ID fields (just like primary key) in schema, for example  use "id" as unique value field :
+
+```clojure
+(def index (clucy/disk-index "mypath" {_id [:id]}, :id {:type "int"},  :name {:type "string"}))
+
+;There's no record so just insert it.
+(clucy/upsert  index {:id 1 :name "Tom"})
+
+=>(clucy/search index "*:*" 10)
+;({:id 1 :name "Tom"})
+
+;now update Tom to Jack
+(clucy/upsert index {:id 1 :name "Jack"})
+
+=>(clucy/search index "*:*" 10)
+;({:id 1 :name "Jack"})
+```
+
+
+Load certain stored fields and fast collect field values for statistics   (eg. sum, avg )
+--------------------
+```clojure
+(let [index (memory-index people-schema)
+                   avg (atom 0) sum (atom 0) max (atom 0) min (atom 0)]
+             ;Do some insert here ........
+             ;.......
+             (search index "age:[34 TO 48]" 100 :fields [:age] ; only load age field
+                     :doc-collector (fn [{age :age} i total]
+                                                 (println "i:" i ",total: " total ",age:" age)
+                                                 (swap! sum + age)
+                                                 (when (or (= i 0) (> @min age)) (reset! min age))
+                                                 (when (or (= i 0) (> age @max)) (reset! max age))
+                                                 (when (= i (dec total)) 
+                                                   (reset! avg  (/ @sum total)))))
+```
+
 
 Default Search Field
 --------------------

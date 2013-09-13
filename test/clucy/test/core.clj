@@ -3,7 +3,7 @@
         clojure.test
         [clojure.set :only [intersection]]))
 
-(def people-schema {:name {} :age {:type "int" } :title {:type "string" :analyzed false} :sal {:type "float"}})
+(def people-schema {:_id [:name :age]  :name {:type "string"} :age {:type "int" } :title {:type "string" :analyzed false} :sal {:type "float"}})
 
 (def people [{:name "Miles" :age 36}
              {:name "Emily" :age 0.3}
@@ -14,6 +14,7 @@
              {:name "Baby" :age -1}
              {:name "Jack" :age 21 :title "A.B"}
              {:name "White" :sal 20.5}])
+
 
 (deftest core
 
@@ -55,6 +56,24 @@
        (is (= {:name "White" :sal 20.5} (first (search index "sal:20.5" 10)) ))
       (is (= {:name "White" :sal 20.5} (first (search index "sal:[20 TO 21]" 10)) ))
       (is (= {:name "Jack" :age 21 :title "A.B"} (first (search index "title:A.B" 10)))))))
+  
+  (testing "collect doc for avg, sum, max, min"
+           (let [index (memory-index people-schema)
+                   avg (atom 0) sum (atom 0) max (atom 0) min (atom 0)]
+             (apply add index people)
+             (search index "age:[34 TO 48]" 100 :fields [:age] 
+                     :doc-collector (fn [{age :age} i total]
+                                                 (println "i:" i ",total: " total ",age:" age)
+                                                 (swap! sum + age)
+                                                 (when (or (= i 0) (> @min age)) (reset! min age))
+                                                 (when (or (= i 0) (> age @max)) (reset! max age))
+                                                 (when (= i (dec total)) 
+                                                   (reset! avg  (/ @sum total)))))
+             (let [ages (->> people (filter #(and (:age %) (<= 34 (:age %) 48))) (map :age)), rsum (reduce + ages)]
+               (is (= rsum @sum))
+               (is (= (/ rsum (count ages)) @avg))
+               (is (= (apply clojure.core/max ages) @max))
+               (is (= (apply clojure.core/min ages) @min)))))
 
   (testing "search-and-delete fn"
     (binding [*schema-hints* people-schema]
@@ -92,10 +111,17 @@
   
   (testing "parallel index"
            (let [index (memory-index), total (atom 0) rc (atom 0),  reportor (fn [c] (swap! rc inc) (swap! total + c))]
-             (padd index reportor (for [i (range 1234567)] {:id i }))
-             (is (= 1234567 @rc))
-             (is (= (/ (* 1234567 1234568) 2) @total))
-             (is (= 1234567 (-> (search index "*:*" 1) (meta) :_total-hits)))))
+             (padd index reportor (for [i (range 654321)] {:id i }))
+             (is (= 654321 @rc))
+             (is (= (/ (* 654321 654322) 2) @total))
+             (is (= 654321 (-> (search index "*:*" 1) (meta) :_total-hits)))))
+  
+  (testing "upsert index"
+           (let [index (memory-index people-schema)]
+             (doseq [p people] (add index p))
+             (upsert index {:name "Jack" :age 21 :title "VP"})
+             (is (== 1 (count (search index "name:jack" 10))))
+             (is (= {:name "Jack" :age 21 :title "VP"} (first (search index "name:jack" 10))))))
   
   (testing "pagination"
     (let [index (memory-index)]

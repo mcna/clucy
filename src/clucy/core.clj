@@ -1,8 +1,11 @@
 (ns clucy.core
   (:import (java.io StringReader File)
+           (java.security MessageDigest)
            (org.apache.lucene.analysis Analyzer TokenStream)
            (org.apache.lucene.analysis.standard StandardAnalyzer)
-           (org.apache.lucene.document Document FieldType  FieldType$NumericType Field IntField FloatField LongField DoubleField Field$Index Field$Store)
+           (org.apache.lucene.document Document FieldType  BinaryDocValuesField FieldType$NumericType 
+                                       Field IntField FloatField LongField DoubleField Field$Index Field$Store
+                                       DocumentStoredFieldVisitor)
            (org.apache.lucene.index IndexWriter IndexReader Term
                                     IndexWriterConfig DirectoryReader FieldInfo)
            (org.apache.lucene.queryparser.classic QueryParser)
@@ -11,7 +14,7 @@
                                      Scorer TermQuery MatchAllDocsQuery NumericRangeQuery)
            (org.apache.lucene.search.highlight Highlighter QueryScorer
                                                SimpleHTMLFormatter)
-           (org.apache.lucene.util Version AttributeSource)
+           (org.apache.lucene.util Version AttributeSource BytesRef)
            (org.apache.lucene.store NIOFSDirectory RAMDirectory Directory)))
 
 (def ^{:dynamic true} *version* Version/LUCENE_44)
@@ -132,6 +135,34 @@
   [map-in]
   (apply str (interpose " " (vals (map-stored map-in)))))
 
+(defn make-id-md5 
+  "idv :  the vector of id fields, m : map"
+  [idv m]
+  (let [bytes (->> idv  (map m) (clojure.string/join "\n~\t!@") (#(.getBytes % "utf-8")))
+            md (doto (MessageDigest/getInstance "MD5") (.reset) (.update  bytes))]
+         (.digest  ^MessageDigest  md)))
+
+(defn md5-to-hex [md5]
+  (.toString (BigInteger. md5 ) 16))
+
+(def  id-field-type (doto (FieldType.) (.setIndexed true) (.setStored false) (.setTokenized false) (.setOmitNorms true)))
+
+(defn make-id-field 
+  "if the _id  is composed from more than one field this function will return  a _id field with md5 values, or will return nil."
+  [m]
+  (if-let [idv (:_id *schema-hints*)]
+    (if (> (count idv) 1)
+      (Field. "_id"   (md5-to-hex (make-id-md5 idv m)) id-field-type))))
+
+
+
+(defn make-id-term [m]
+  (if-let [idv (:_id *schema-hints*)]
+    (if (> (count idv) 1)
+      (Term. "_id" (md5-to-hex (make-id-md5 idv m)))
+      (Term. (name (first idv)) (-> idv first m str)))
+    (throw (RuntimeException. "there's no _id defined in *schema-hints*"))))
+
 (defn- map->document
   "Create a Document from a map."
   [map]
@@ -141,6 +172,8 @@
         (add-field document key value (key *schema-hints*))))
     (if *content*
       (add-field document :_content (concat-values map)))
+    (when-let [id-field (make-id-field map)]
+      (.add ^Document document id-field))
     document))
 
 (defn add
@@ -153,6 +186,17 @@
       (doseq [m maps]
         (.addDocument writer
                     (map->document m)))))))
+
+(defn upsert 
+  "Insert documents or update them if they exist"
+  [index & maps ]
+  (binding [*schema-hints* (or (meta index) *schema-hints*)] 
+    (binding [*doc-with-meta?* (and *doc-with-meta?*  (-> :*doc-with-meta?*  *schema-hints* false? not))
+              *content* (and *content* (-> :*content*  *schema-hints* false? not))]
+    (with-open [writer (index-writer index)]
+      (doseq [m maps]
+        (.updateDocument writer (make-id-term m)
+                    (map->document m) ))))))
 
 (defn padd
   "Parallel add hash-maps to the search index."
@@ -282,7 +326,7 @@ fragments."
 (defn search
   "Search the supplied index with a query string."
   [index query max-results
-   & {:keys [highlight default-field default-operator page results-per-page sort-by]
+   & {:keys [highlight default-field default-operator page results-per-page sort-by fields doc-collector]
       :or {page 0 results-per-page max-results}}]
   (binding [*schema-hints* (or (meta index) *schema-hints*)] 
     (binding [*doc-with-meta?* (and *doc-with-meta?*  (-> :*doc-with-meta?*  *schema-hints* false? not))
@@ -301,17 +345,24 @@ fragments."
 					            hits (if (nil? sort) (.search searcher query (int max-results))  (.search searcher query (int max-results) sort))
 					            highlighter (make-highlighter query searcher highlight)
 					            start (* page results-per-page)
-					            end (min (+ start results-per-page) (.totalHits hits))]
-					        (doall
-					         (with-meta (for [hit (map (partial aget (.scoreDocs hits))
-					                                   (range start end))]
-					                      (document->map (.doc ^IndexSearcher searcher
-					                                           (.doc ^ScoreDoc hit))
+                      total (.totalHits hits)
+					            end (min (+ start results-per-page) total)
+                      field-set (and fields (set (map name fields)))]
+             (if doc-collector 
+               (doseq [i (range start end) :let [hit (aget (.scoreDocs hits) i)]]
+                                           (doc-collector (document->map 
+                                                                      (.doc ^IndexSearcher searcher (.doc ^ScoreDoc hit)  field-set)
+					                                                            (.score ^ScoreDoc hit)
+					                                                             highlighter)
+                                                          i total))
+               (doall
+					         (with-meta (for [i (range start end) :let [hit (aget (.scoreDocs hits) i)]]
+                                           (document->map 
+                                               (.doc ^IndexSearcher searcher (.doc ^ScoreDoc hit)  field-set)
 					                                     (.score ^ScoreDoc hit)
-					
 					                                     highlighter))
 					           {:_total-hits (.totalHits hits)
-					            :_max-score (.getMaxScore hits)}))))))))
+					            :_max-score (.getMaxScore hits)})))))))))
 
 
 
