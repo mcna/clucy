@@ -28,6 +28,8 @@
 
 (def ^:dynamic  *schema-hints* {:*content* true,  :*doc-with-meta?* true})
 
+(def ^:dynamic *index-writer-cfg-fn* identity)
+
 (defn as-int ^Integer [x]
   (cond
     (instance? Integer  x) x
@@ -79,8 +81,10 @@
   "Create an IndexWriter."
   ^IndexWriter
   [index]
-  (IndexWriter. index
-                (IndexWriterConfig. *version* *analyzer*)))
+  (let [cfg (-> (IndexWriterConfig. *version* *analyzer*)
+                *index-writer-cfg-fn*)]
+    (IndexWriter. index
+                  cfg)))
 
 (defn- index-reader
   "Create an IndexReader."
@@ -205,6 +209,17 @@
       (doseq [m maps]
         (.addDocument writer
                     (map->document m)))))))
+
+(defn madd
+  [index & map-chunks]
+  (binding [*schema-hints* (or (meta index) *schema-hints*)] 
+    (binding [*doc-with-meta?* (and *doc-with-meta?*  (-> :*doc-with-meta?*  *schema-hints* false? not))
+              *content* (and *content* (-> :*content*  *schema-hints* false? not))]
+    (with-open [writer (index-writer index)]
+      (dorun 
+       (pmap #(.addDocuments writer
+                             (mapv map->document %))
+             map-chunks))))))
 
 (defn upsert 
   "Insert documents or update them if they exist"
