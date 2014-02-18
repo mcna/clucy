@@ -30,6 +30,13 @@
 
 (def ^:dynamic *index-writer-cfg-fn* identity)
 
+;; bindable vars for reusable index reader/searcher to utilize
+;; lucene internal caching
+(def ^:dynamic *index-reader* nil)
+
+(def ^:dynamic *index-searcher* nil)
+
+
 (defn as-int ^Integer [x]
   (cond
     (instance? Integer  x) x
@@ -86,7 +93,7 @@
     (IndexWriter. index
                   cfg)))
 
-(defn- index-reader
+(defn index-reader
   "Create an IndexReader."
   ^IndexReader
   [index]
@@ -359,6 +366,42 @@ fragments."
                         (= "desc" flag))))
       sort)))
 
+(defmacro with-searcher [index & forms]
+  `(with-open [idx-rdr# (index-reader ~index)]
+    (binding [*index-reader* idx-rdr#
+              *index-searcher* (IndexSearcher. idx-rdr#)]
+      (do ~@forms))))
+
+(defn- search* [searcher query max-results highlight default-field default-operator page results-per-page sort-by fields doc-collector]
+  (let [default-field (or default-field :_content)
+        parser (doto (make-parser default-field)
+                 (.setDefaultOperator (case (or default-operator :or)
+                                        :and QueryParser/AND_OPERATOR
+                                        :or  QueryParser/OR_OPERATOR)))
+        sort (make-sort sort-by)
+        ^Query query (if (= "*:*" query) (MatchAllDocsQuery.) (.parse parser query))
+        ^TopDocs hits (if (nil? sort) (.search searcher query (int max-results))  (.search searcher query (int max-results) sort))
+        highlighter (make-highlighter query searcher highlight)
+        start (* page results-per-page)
+        total (.totalHits hits)
+        end (min (+ start results-per-page) total)
+        field-set (and fields (set (map name fields)))]
+    (if doc-collector 
+      (doseq [i (range start end) :let [hit (aget (.scoreDocs hits) i)]]
+        (doc-collector (document->map 
+                        (.doc ^IndexSearcher searcher (.doc ^ScoreDoc hit)  ^java.util.Set field-set)
+                        (.score ^ScoreDoc hit)
+                        highlighter)
+                       i total))
+      (doall
+       (with-meta (for [i (range start end) :let [hit (aget (.scoreDocs hits) i)]]
+                    (document->map 
+                     (.doc ^IndexSearcher searcher (.doc ^ScoreDoc hit)  ^java.util.Set  field-set)
+                     (.score ^ScoreDoc hit)
+                     highlighter))
+         {:_total-hits (.totalHits hits)
+          :_max-score (.getMaxScore hits)})))))
+
 (defn search
   "Search the supplied index with a query string."
   [index query max-results
@@ -369,36 +412,10 @@ fragments."
               *content* (and *content* (-> :*content*  *schema-hints* false? not))]
             (if (every? false? [default-field *content*])
 					    (throw (Exception. "No default search field specified"))
-					    (with-open [reader (index-reader index)]
-					      (let [default-field (or default-field :_content)
-					            ^IndexSearcher searcher (IndexSearcher. reader)
-					            parser (doto (make-parser default-field)
-					                     (.setDefaultOperator (case (or default-operator :or)
-					                                            :and QueryParser/AND_OPERATOR
-					                                            :or  QueryParser/OR_OPERATOR)))
-					            sort (make-sort sort-by)
-					            ^Query query (if (= "*:*" query) (MatchAllDocsQuery.) (.parse parser query))
-					            ^TopDocs hits (if (nil? sort) (.search searcher query (int max-results))  (.search searcher query (int max-results) sort))
-					            highlighter (make-highlighter query searcher highlight)
-					            start (* page results-per-page)
-                      total (.totalHits hits)
-					            end (min (+ start results-per-page) total)
-                      field-set (and fields (set (map name fields)))]
-             (if doc-collector 
-               (doseq [i (range start end) :let [hit (aget (.scoreDocs hits) i)]]
-                                           (doc-collector (document->map 
-                                                                      (.doc ^IndexSearcher searcher (.doc ^ScoreDoc hit)  ^java.util.Set field-set)
-					                                                            (.score ^ScoreDoc hit)
-					                                                             highlighter)
-                                                          i total))
-               (doall
-					         (with-meta (for [i (range start end) :let [hit (aget (.scoreDocs hits) i)]]
-                                           (document->map 
-                                               (.doc ^IndexSearcher searcher (.doc ^ScoreDoc hit)  ^java.util.Set  field-set)
-					                                     (.score ^ScoreDoc hit)
-					                                     highlighter))
-					           {:_total-hits (.totalHits hits)
-					            :_max-score (.getMaxScore hits)})))))))))
+                                            (if *index-searcher*
+                                              (search* *index-searcher* query max-results highlight default-field default-operator page results-per-page sort-by fields doc-collector)
+                                              (with-open [reader (index-reader index)]
+                                                (search* (IndexSearcher. reader) query max-results highlight default-field default-operator page results-per-page sort-by fields doc-collector)))))))
 
 
 (defn search-and-delete-numeric [index field from to]
