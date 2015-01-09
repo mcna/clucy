@@ -434,7 +434,7 @@ fragments."
   "Search the supplied index with a query string and then delete all
   of the results."
   ([index query]
-   (search-and-delete index query (when *content :_content)))
+   (search-and-delete index query (when *content* :_content)))
   ([index query default-field]
    (binding [*schema-hints* (or (meta index) *schema-hints*)
              *doc-with-meta?* (and *doc-with-meta?*  (-> :*doc-with-meta?*  *schema-hints* false? not))
