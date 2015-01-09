@@ -95,22 +95,18 @@
   [index]
   (DirectoryReader/open ^Directory index))
 
-(def numeric-field-typs {
-                         "int" {"truetrue" IntField/TYPE_STORED, 
-                                "truefalse" (doto (FieldType. IntField/TYPE_STORED) (.setIndexed false))
-                                "falsetrue" IntField/TYPE_NOT_STORED
-                                }
-                         "long" {"truetrue" LongField/TYPE_STORED, 
-                                 "truefalse" (doto (FieldType. LongField/TYPE_STORED) (.setIndexed false))
-                                 "falsetrue" LongField/TYPE_NOT_STORED
-                                 }
-                         "float" {"truetrue" FloatField/TYPE_STORED, 
-                                  "truefalse" (doto (FieldType. FloatField/TYPE_STORED) (.setIndexed false))
-                                  "falsetrue" FloatField/TYPE_NOT_STORED
-                                  }
-                         "double" {"truetrue" DoubleField/TYPE_STORED, 
-                                   "truefalse" (doto (FieldType. DoubleField/TYPE_STORED) (.setIndexed false))
-                                   "falsetrue" DoubleField/TYPE_NOT_STORED}})
+(def numeric-field-types {"int" {"truetrue" IntField/TYPE_STORED
+                                 "truefalse" (doto (FieldType. IntField/TYPE_STORED) (.setIndexed false))
+                                 "falsetrue" IntField/TYPE_NOT_STORED}
+                          "long" {"truetrue" LongField/TYPE_STORED
+                                  "truefalse" (doto (FieldType. LongField/TYPE_STORED) (.setIndexed false))
+                                  "falsetrue" LongField/TYPE_NOT_STORED}
+                          "float" {"truetrue" FloatField/TYPE_STORED
+                                   "truefalse" (doto (FieldType. FloatField/TYPE_STORED) (.setIndexed false))
+                                   "falsetrue" FloatField/TYPE_NOT_STORED}
+                          "double" {"truetrue" DoubleField/TYPE_STORED
+                                    "truefalse" (doto (FieldType. DoubleField/TYPE_STORED) (.setIndexed false))
+                                    "falsetrue" DoubleField/TYPE_NOT_STORED}})
 
 (defn- add-field
   "Add a Field to a Document.
@@ -126,7 +122,8 @@
          store? (not (false? (:stored meta-map)))
          index? (not (false? (:indexed meta-map)))
          vt (:type meta-map)
-         ft (if-let [ftm (numeric-field-typs vt)] (ftm (str store? index?)))
+         ft (if-let [ftm (numeric-field-types vt)]
+              (ftm (str store? index?)))
          field (case vt 
                  "int" (IntField. n (as-int value) ft)
                  "long" (LongField. n (as-long value) ft)
