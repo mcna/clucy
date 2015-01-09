@@ -4,7 +4,8 @@ ZClucy
 To install in your local repository:
 
 ```
-lein localrepo install -p pom.xml /Users/hans/mcna/clucy/target/zclucy-mcna-0.9.2.jar zclucy-mcna 0.9.2
+lein pom
+lein localrepo install -p pom.xml target/zclucy-mcna-0.9.2.jar zclucy-mcna 0.9.2
 ```
 
 [![Build Status](https://secure.travis-ci.org/yxzhang/clucy.png?branch=master)](http://travis-ci.org/yxzhang/clucy)
