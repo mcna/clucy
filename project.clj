@@ -1,6 +1,6 @@
-(defproject zclucy "0.9.2"
+(defproject zclucy-mcna "0.9.2"
   :description "A Clojure interface to the Lucene search engine"
-  :url "http://github.com//yxzhang/clucy"
+  :url "http://github.com/mcna/clucy"
   :dependencies [[org.clojure/clojure "1.4.0"]
                  [org.apache.lucene/lucene-core "4.4.0"]
                  [org.apache.lucene/lucene-queryparser "4.4.0"]
@@ -12,5 +12,5 @@
              :1.5  {:dependencies [[org.clojure/clojure "1.5.0"]]}
              :1.6  {:dependencies [[org.clojure/clojure "1.6.0-master-SNAPSHOT"]]}}
   :warn-on-reflection true
-  :codox {:src-dir-uri "http://github.com/yxzhang/clucy/blob/master"
+  :codox {:src-dir-uri "http://github.com/mcna/clucy/blob/master"
           :src-linenum-anchor-prefix "L"})
