@@ -114,13 +114,15 @@
   :stored - when false, then do not store the field value in the index.
   :indexed - when false, then do not index the field.
   :analyzed - when :indexed is enabled use this option to disable/eneble Analyzer for current field.
-  :norms - when :indexed is enabled user this option to disable/enable the storing of norms."
+  :norms - when :indexed is enabled user this option to disable/enable the storing of norms.
+  :boost - set a custom boost value for this field"
   ([document key value]
    (add-field document key value {}))
   ([document key value meta-map]
    (let [n (name key)
          store? (not (false? (:stored meta-map)))
          index? (not (false? (:indexed meta-map)))
+         boost (:boost meta-map)
          vt (:type meta-map)
          ft (if-let [ftm (numeric-field-types vt)]
               (ftm (str store? index?)))
@@ -135,6 +137,8 @@
                                     (.setStored store?) (.setIndexed index?) 
                                     (.setTokenized analyzed?) (.setOmitNorms (not norms?)))] 
                    (Field. n (as-str value) field-type)))]
+     (when boost
+       (.setBoost field boost))
      (.add ^Document document field))))
 
 (defn- map-stored
