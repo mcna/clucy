@@ -316,24 +316,42 @@ fragments."
 
 (defn ^QueryParser make-parser [default-field]
   (proxy [QueryParser] [*version* (as-str default-field) *analyzer*]
-    (newFieldQuery [^Analyzer analyzer,  ^String field,  ^String queryText,  quoted]
+    (newFieldQuery [^Analyzer analyzer
+                    ^String field
+                    ^String queryText
+                    quoted]
       (let [{:keys [type analyzed]} (-> field keyword *schema-hints*)]
         (case type
-          "long" (let [v (-> queryText Long/parseLong)] (NumericRangeQuery/newLongRange field  v v true true))
-          "int" (let [v (-> queryText Integer/parseInt)] (NumericRangeQuery/newIntRange field v v true true))
-          "double" (let [v (-> queryText Double/parseDouble)] (NumericRangeQuery/newDoubleRange field  v v true true))
-          "float" (let [v (-> queryText Float/parseFloat)] (NumericRangeQuery/newFloatRange field  v v true true))
-          (if (false? analyzed) (proxy-super newTermQuery (Term.   field queryText))
-              (let [^QueryParser this this] (proxy-super newFieldQuery analyzer field queryText quoted))))))
+          "long" (let [v (-> queryText Long/parseLong)]
+                   (NumericRangeQuery/newLongRange field v v true true))
+          "int" (let [v (-> queryText Integer/parseInt)]
+                  (NumericRangeQuery/newIntRange field v v true true))
+          "double" (let [v (-> queryText Double/parseDouble)]
+                     (NumericRangeQuery/newDoubleRange field  v v true true))
+          "float" (let [v (-> queryText Float/parseFloat)]
+                    (NumericRangeQuery/newFloatRange field  v v true true))
+          (if (false? analyzed)
+            (proxy-super newTermQuery (Term. field queryText))
+            (let [^QueryParser this this]
+              (proxy-super newFieldQuery analyzer field queryText quoted))))))
     
     (newRangeQuery [^String field ^String from ^String to   start-include?  end-include?]
       (if-let [num-type (-> field keyword *schema-hints* :type)]
         (case num-type
-          "long" (let [start (-> from Long/parseLong), end (-> to Long/parseLong)] (NumericRangeQuery/newLongRange field  start end true true))
-          "int" (let [start (-> from Integer/parseInt), end (-> to Integer/parseInt)] (NumericRangeQuery/newIntRange field  start end true true))
-          "double" (let [start (-> from Double/parseDouble) end (-> to Double/parseDouble)] (NumericRangeQuery/newDoubleRange field  start end true true))
-          "float" (let [start (-> from  Float/parseFloat) end (-> to Float/parseFloat)] (NumericRangeQuery/newFloatRange field  start end true true)))
-        (let [^QueryParser this this ] (proxy-super  newRangeQuery field from to start-include? end-include?))))))
+          "long" (let [start (-> from Long/parseLong)
+                       end (-> to Long/parseLong)]
+                   (NumericRangeQuery/newLongRange field  start end true true))
+          "int" (let [start (-> from Integer/parseInt)
+                      end (-> to Integer/parseInt)]
+                  (NumericRangeQuery/newIntRange field  start end true true))
+          "double" (let [start (-> from Double/parseDouble)
+                         end (-> to Double/parseDouble)]
+                     (NumericRangeQuery/newDoubleRange field  start end true true))
+          "float" (let [start (-> from  Float/parseFloat)
+                        end (-> to Float/parseFloat)]
+                    (NumericRangeQuery/newFloatRange field  start end true true)))
+        (let [^QueryParser this this]
+          (proxy-super newRangeQuery field from to start-include? end-include?))))))
 
 (defn ^Sort make-sort 
   "make sort from sort-str such as \"name asc, age desc\""
@@ -348,7 +366,10 @@ fragments."
                                                        "double" SortField$Type/DOUBLE
                                                        "float" SortField$Type/FLOAT
                                                        "string" SortField$Type/STRING
-                                                       (case field "$doc" SortField$Type/DOC "$score"  SortField$Type/SCORE SortField$Type/STRING))
+                                                       (case field
+                                                         "$doc" SortField$Type/DOC
+                                                         "$score" SortField$Type/SCORE
+                                                         SortField$Type/STRING))
                                      (= "desc" flag))))
         sort)))
 
@@ -393,15 +414,15 @@ fragments."
   [index query max-results
    & {:keys [highlight default-field default-operator page results-per-page sort-by fields doc-collector]
       :or {page 0 results-per-page max-results}}]
-  (binding [*schema-hints* (or (meta index) *schema-hints*)] 
-    (binding [*doc-with-meta?* (and *doc-with-meta?*  (-> :*doc-with-meta?*  *schema-hints* false? not))
-              *content* (and *content* (-> :*content*  *schema-hints* false? not))]
-      (if (every? false? [default-field *content*])
-        (throw (Exception. "No default search field specified"))
-        (if *index-searcher*
-          (search* *index-searcher* query max-results highlight default-field default-operator page results-per-page sort-by fields doc-collector)
-          (with-open [reader (index-reader index)]
-            (search* (IndexSearcher. reader) query max-results highlight default-field default-operator page results-per-page sort-by fields doc-collector)))))))
+  (binding [*schema-hints* (or (meta index) *schema-hints*)
+            *doc-with-meta?* (and *doc-with-meta?*  (-> :*doc-with-meta?*  *schema-hints* false? not))
+            *content* (and *content* (-> :*content*  *schema-hints* false? not))]
+    (if (every? false? [default-field *content*])
+      (throw (Exception. "No default search field specified"))
+      (if *index-searcher*
+        (search* *index-searcher* query max-results highlight default-field default-operator page results-per-page sort-by fields doc-collector)
+        (with-open [reader (index-reader index)]
+          (search* (IndexSearcher. reader) query max-results highlight default-field default-operator page results-per-page sort-by fields doc-collector))))))
 
 (defn search-and-delete-numeric [index field from to]
   (with-open [writer (index-writer index)]
