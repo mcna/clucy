@@ -406,24 +406,19 @@ fragments."
 (defn search-and-delete-numeric [index field from to]
   (with-open [writer (index-writer index)]
     (let [query (NumericRangeQuery/newLongRange (as-str field) from to false false)]
-      (println query)
       (.deleteDocuments writer query))))
 
 (defn search-and-delete
   "Search the supplied index with a query string and then delete all
   of the results."
   ([index query]
-   (if *content*
-     (search-and-delete index query :_content)
-     (search-and-delete index query nil)))
+   (search-and-delete index query (when *content :_content)))
   ([index query default-field]
-   (binding [*schema-hints* (or (meta index) *schema-hints*)] 
-     (println *schema-hints*)
-     (binding [*doc-with-meta?* (and *doc-with-meta?*  (-> :*doc-with-meta?*  *schema-hints* false? not))
-               *content* (and *content* (-> :*content*  *schema-hints* false? not))]
-       (with-open [writer (index-writer index)]
-         (let [parser (QueryParser. *version* (as-str default-field) *analyzer*)
-               query  (.parse parser query)]
-           (println query)
-           (.deleteDocuments writer query)))))))
+   (binding [*schema-hints* (or (meta index) *schema-hints*)
+             *doc-with-meta?* (and *doc-with-meta?*  (-> :*doc-with-meta?*  *schema-hints* false? not))
+             *content* (and *content* (-> :*content*  *schema-hints* false? not))]
+     (with-open [writer (index-writer index)]
+       (let [parser (QueryParser. *version* (as-str default-field) *analyzer*)
+             query (.parse parser query)]
+         (.deleteDocuments writer query))))))
 
