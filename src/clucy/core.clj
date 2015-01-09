@@ -274,18 +274,19 @@
    (let [m (apply merge-with  (fn [a b] (if (coll? a) (conj a b) [a b]))
                   (for [^Field f (.getFields document)]
                     {(keyword (.name f)) (or (.numericValue f) (.stringValue f))}))]
-     (if-not *doc-with-meta?* m
-             (with-meta
-               (dissoc m :_content)
-               (-> (into {}
-                         (for [^Field f (.getFields document)
-                               :let [field-type (.fieldType f)]]
-                           [(keyword (.name f)) {:indexed (.indexed field-type)
-                                                 :stored (.stored field-type)
-                                                 :tokenized (.tokenized field-type)}]))
-                   (assoc :_fragments (highlighter m) ; so that we can highlight :_content
-                          :_score score)
-                   (dissoc :_content)))))))
+     (if-not *doc-with-meta?*
+       m
+       (with-meta
+         (dissoc m :_content)
+         (-> (into {}
+                   (for [^Field f (.getFields document)
+                         :let [field-type (.fieldType f)]]
+                     [(keyword (.name f)) {:indexed (.indexed field-type)
+                                           :stored (.stored field-type)
+                                           :tokenized (.tokenized field-type)}]))
+             (assoc :_fragments (highlighter m) ; so that we can highlight :_content
+                    :_score score)
+             (dissoc :_content)))))))
 
 (defn- make-highlighter
   "Create a highlighter function which will take a map and return highlighted
