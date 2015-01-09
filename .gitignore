@@ -8,3 +8,4 @@ pom.xml.asc
 /bin
 /.settings/ccw.repl.cmdhistory.prefs
 /.settings
+/.lein-repl-history
